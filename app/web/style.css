@@ -5,3 +5,10 @@ aside{display:flex;flex-direction:column}aside nav{flex:1;min-height:0;max-heigh
 .competition-chart{width:100%;height:auto;display:block;min-width:650px}.chart-panel{margin:30px 0;border-top:1px solid #e1e8f0;padding-top:12px;overflow:auto}#competition-groups table{min-width:950px}#import-preview table{min-width:900px}#batch-progress table,#batch-list table{min-width:780px}#analytics-teams{display:flex;flex-wrap:wrap;gap:12px}#batch-submissions input[type=checkbox]{width:18px;height:18px}input[readonly]{background:#edf2f7}nav{max-height:calc(100vh - 240px);overflow:auto}@media(max-width:700px){nav{max-height:none;overflow:auto}.competition-chart{min-width:650px}}
 
 aside nav{max-height:none}@media(max-width:700px){aside nav{display:block;flex:auto;max-height:40vh;overflow-y:auto;margin-top:12px}nav button{width:100%;padding:9px 12px}.nav-group+.nav-group{margin-top:12px;padding-top:12px}}
+
+/* V1.3 four-step official competition workflow */
+#legacy-import summary, #historical-report summary { cursor: pointer; font-weight: 650; padding: 6px 0; }
+#json-import-status { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; color: var(--muted, #54667a); }
+#submission-selection-status { margin: 12px 0; }
+#json-upload input[type=file] { min-width: 250px; max-width: 100%; }
+#go-batches { margin-top: 8px; }
