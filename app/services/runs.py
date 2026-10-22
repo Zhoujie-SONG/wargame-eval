@@ -25,8 +25,8 @@ def dataset_digest(rows):
     return hashlib.sha256(dumps(rows).encode()).hexdigest()
 
 
-def create_run(data):
-    cfg = settings()
+def prepare_run(data, context=None):
+    cfg = context['config'] if context else settings()
     cap = cfg['competition']['max_calls_per_question']
     if not 1 <= data.calls <= cap:
         raise ValueError(f'主办方调用上限为 {cap}')
@@ -37,8 +37,8 @@ def create_run(data):
         raise ValueError('模型或 Prompt 配置不存在')
     model = json.loads(model_row['body'])
     prompt = json.loads(prompt_row['body'])
-    all_questions = question_rows()
-    rows = [q for q in all_questions if (not data.dimension or q['level']+'_'+q['role'] == data.dimension)
+    all_questions = context['questions'] if context else question_rows()
+    rows = [dict(q) for q in all_questions if (not data.dimension or q['level']+'_'+q['role'] == data.dimension)
             and (not data.question_ids or q['question_id'] in data.question_ids)]
     if data.question_ids and set(data.question_ids) - {q['question_id'] for q in all_questions}:
         raise ValueError('指定题目 ID 不存在')
@@ -46,9 +46,9 @@ def create_run(data):
         rows = rows[:data.limit]
     if not rows:
         raise ValueError('题目范围为空，请先导入数据')
-    images = get_images()
+    images = context['images'] if context else get_images()
     from app.services.images import mock_image
-    placeholder = mock_image() if model['provider'] == 'mock' else None
+    placeholder = (context.get('placeholder') if context else mock_image()) if model['provider'] == 'mock' else None
     for q in rows:
         q['image'] = images.get((q['replay_id'], q['image_step'])) or placeholder
     complete = len(rows) == sum(cfg['dataset']['expected_counts'].values()) and {
@@ -63,15 +63,20 @@ def create_run(data):
     snapshot = {'name': data.name, 'model': model, 'prompt': prompt, 'mode': data.mode, 'calls': data.calls,
                 'early_stop': data.early_stop, 'official': data.official,
                 'kind': 'official' if data.official else ('mock' if model['provider'] == 'mock' else 'partial_test'),
-                'config': cfg, 'questions': rows, 'dataset_sha256': dataset_digest(all_questions),
+                'config': cfg, 'questions': rows, 'dataset_sha256': context['digest'] if context else dataset_digest(all_questions),
                 'started_at': None, 'finished_at': None}
     rules = {'config': cfg, 'dataset': snapshot['dataset_sha256'],
              'images': [(q['question_id'], q['image']) for q in rows]}
     snapshot['cohort'] = dataset_digest(rules)[:16]
+    return snapshot, encrypt(key)
+
+
+def create_run(data):
+    snapshot, secret = prepare_run(data)
     run_id = uuid4().hex
     with db() as c:
         c.execute('INSERT INTO runs(id,status,created_at,body,secret) VALUES(?,?,?,?,?)',
-                  (run_id, 'queued', now(), dumps(snapshot), encrypt(key)))
+                  (run_id, 'queued', now(), dumps(snapshot), secret))
     return run_id
 
 
@@ -100,7 +105,7 @@ def report(run_id, include_results=True):
     elapsed = (datetime.fromisoformat(end)-datetime.fromisoformat(started)).total_seconds() if started else 0
     value = dict(run_id=run_id, name=body['name'], status=row['status'], kind=body['kind'],
                  model=public_model, mode=body['mode'], prompt_version=body['prompt']['version'],
-                 calls_per_question=body['calls'], budget=body['config']['competition'],
+                 calls_per_question=body['calls'], early_stop=body['early_stop'], budget=body['config']['competition'],
                  cohort=body['cohort'], dataset_sha256=body['dataset_sha256'],
                  created_at=row['created_at'], started_at=started, finished_at=body.get('finished_at'),
                  total=total, completed=len(results), progress=len(results)/total,
@@ -112,6 +117,7 @@ def report(run_id, include_results=True):
                  token_usage={k: sum(r.get('usage', {}).get(k, 0) for r in calls)
                               for k in ('prompt_tokens', 'completion_tokens', 'total_tokens')},
                  eligible=eligible, **summary)
+    value.update({k:body.get(k) for k in ('batch_id','team_id','submission_version')})
     if include_results:
         value['results'] = list(results.values())
         value['calls'] = calls
@@ -155,6 +161,8 @@ class Runner:
 
     async def execute(self, run_id):
         row, body = load_run(run_id)
+        if row['status'] not in ('queued','stopping'):
+            return
         if row['stop']:
             with db() as c:
                 c.execute("UPDATE runs SET status='stopped' WHERE id=?", (run_id,))

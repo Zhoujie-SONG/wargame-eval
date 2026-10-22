@@ -41,7 +41,7 @@ async def lifespan(app):
     await runner.close()
 
 
-app = FastAPI(title='兵棋多模态智能体竞赛测评系统', version='1.1.0', lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title='兵棋多模态智能体竞赛测评系统', version='1.2.0', lifespan=lifespan, docs_url=None, redoc_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', '[::1]', 'testserver'])
 
 
@@ -55,7 +55,7 @@ async def local_protection(request: Request, call_next):
     response = await call_next(request)
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'no-referrer'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    response.headers.setdefault('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
     response.headers['Cache-Control'] = 'no-store'
     return response
 
@@ -73,7 +73,7 @@ async def validation_error(request, exc):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'version': '1.1.0'}
+    return {'status': 'ok', 'version': '1.2.0'}
 
 
 @app.get('/docs', include_in_schema=False)
@@ -328,6 +328,7 @@ def rerun(run_id: str):
     with db() as c:
         c.execute('INSERT INTO runs(id,status,created_at,body,secret) VALUES(?,?,?,?,?)', (identity,'queued',now(),dumps(body),row['secret']))
         c.execute("UPDATE runs SET status='superseded' WHERE id=?",(run_id,))
+        c.execute('UPDATE batch_entries SET run_id=? WHERE run_id=?',(identity,run_id))
     runner.enqueue(identity)
     return {'run_id':identity}
 
@@ -344,9 +345,11 @@ def leaderboard(kind: str = 'official', cohort: str = ''):
     # Different frozen rules are never assigned a shared official rank.
     ranks = {}
     for r in values:
-        group = r['cohort']
+        group = (r.get('batch_id'),r['cohort'],r['mode'],1 if r['mode']=='single_pass' else r['calls_per_question'],r['early_stop'])
         ranks[group] = ranks.get(group,0)+1
         r['rank'] = ranks[group]
+        from app.services.runs import dataset_digest
+        r['ranking_group'] = dataset_digest(group)[:16]
     return values
 
 
@@ -371,6 +374,8 @@ def export(run_id: str, format: str):
     return Response(content,media_type=mime,headers={'Content-Disposition':f'attachment; filename={run_id}.{format}'})
 
 
+from app.api.competition import router as competition_router
+app.include_router(competition_router)
 app.mount('/static',StaticFiles(directory=ROOT/'app/web'),name='static')
 
 

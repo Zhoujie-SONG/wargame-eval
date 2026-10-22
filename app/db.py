@@ -41,6 +41,21 @@ def init_db():
           PRIMARY KEY(replay_id,image_step));
         CREATE TABLE IF NOT EXISTS models (id TEXT PRIMARY KEY, body TEXT NOT NULL, secret TEXT);
         CREATE TABLE IF NOT EXISTS prompts (id TEXT PRIMARY KEY, body TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS submissions (
+          id TEXT PRIMARY KEY, team_id TEXT REFERENCES teams(id), version TEXT NOT NULL,
+          name TEXT NOT NULL, model_id TEXT NOT NULL, prompt_id TEXT NOT NULL,
+          fingerprint TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(team_id,version));
+        CREATE TABLE IF NOT EXISTS import_previews (
+          id TEXT PRIMARY KEY, secret TEXT, created_at TEXT NOT NULL, result TEXT);
+        CREATE TABLE IF NOT EXISTS evaluation_batches (
+          id TEXT PRIMARY KEY, request_key TEXT UNIQUE, name TEXT NOT NULL,
+          created_at TEXT NOT NULL, body TEXT NOT NULL, started INTEGER NOT NULL DEFAULT 0,
+          stopped INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS batch_entries (
+          batch_id TEXT REFERENCES evaluation_batches(id), team_id TEXT NOT NULL,
+          submission_id TEXT NOT NULL, run_id TEXT UNIQUE REFERENCES runs(id),
+          PRIMARY KEY(batch_id,team_id));
         CREATE TABLE IF NOT EXISTS runs (
           id TEXT PRIMARY KEY, status TEXT NOT NULL, created_at TEXT NOT NULL,
           stop INTEGER DEFAULT 0, body TEXT NOT NULL, secret TEXT, error TEXT);

@@ -1,0 +1,233 @@
+import asyncio
+import copy
+import io
+import json
+import socket
+import time
+from concurrent.futures import ThreadPoolExecutor
+import httpx
+import pytest
+from openpyxl import load_workbook
+from app.db import db,dumps,init_db
+from app.services import submissions as subs
+
+
+def upload(client,format='csv',rows=None):
+    rows=subs.template_rows(True) if rows is None else rows
+    content=subs.csv_bytes(subs.FIELDS,rows) if format=='csv' else subs.spreadsheet_bytes(subs.FIELDS,rows)
+    r=client.post('/api/submissions/batch/preview',files={'file':('teams.'+format,content)})
+    assert r.status_code==200,r.text
+    return r.json()
+
+
+def import_five(client,format='csv',rows=None):
+    p=upload(client,format,rows)
+    assert p['errors']==0,p
+    r=client.post('/api/submissions/batch/import',json={'preview_id':p['preview_id']})
+    assert r.status_code==200,r.text
+    return r.json()['submission_ids']
+
+
+def batch_payload(ids,**kwargs):
+    p={'request_key':'test-key-'+str(time.monotonic_ns()),'name':'五队联调','submission_ids':ids,'calls':1,
+       'question_ids':['G01-01-CORE','G01-02-CORE','G01-01-P1','G01-01-C1']}
+    p.update(kwargs)
+    return p
+
+
+def wait_batch(c,bid):
+    for _ in range(1000):
+        b=c.get('/api/evaluation-batches/'+bid).json()
+        if b['status'] not in ('draft','running'):return b
+        time.sleep(.01)
+    raise AssertionError('batch not completed')
+
+
+def run_batch(c,ids,**kwargs):
+    r=c.post('/api/evaluation-batches',json=batch_payload(ids,**kwargs));assert r.status_code==200,r.text
+    bid=r.json()['batch_id'];assert c.post('/api/evaluation-batches/'+bid+'/start').status_code==200
+    return wait_batch(c,bid)
+
+
+@pytest.mark.parametrize('format',['csv','xlsx'])
+def test_five_teams_multiline_and_idempotent(client,format):
+    rows=subs.template_rows(True)
+    rows[0][8]='中文逗号, "引号"\n第二行\r\n第三行'
+    p=upload(client,format,rows)
+    assert p['total']==5 and p['ready']==5 and p['api_requests']==0
+    assert client.get('/api/submissions').json()==[]
+    result=client.post('/api/submissions/batch/import',json={'preview_id':p['preview_id']}).json()
+    assert result['imported']==5
+    assert client.post('/api/submissions/batch/import',json={'preview_id':p['preview_id']}).json()==result
+    assert upload(client,format,rows)['duplicates']==5
+    with db() as con:
+        saved=json.loads(con.execute('SELECT p.body FROM prompts p JOIN submissions s ON s.prompt_id=p.id WHERE s.team_id=?',('team-1',)).fetchone()[0])
+        assert saved['system']==rows[0][8]
+        assert con.execute('SELECT count(*) FROM submissions').fetchone()[0]==5
+        assert all(r[0] is None for r in con.execute('SELECT secret FROM import_previews WHERE result IS NOT NULL'))
+
+
+def test_preview_errors_and_transaction(client,monkeypatch):
+    rows=subs.template_rows(True);rows[1][8]='';rows[2][13]='wrong';rows[3][3]='https://127.0.0.1';rows[3][13]='openai';rows[3][4]='DO-NOT-LEAK'
+    p=upload(client,rows=rows)
+    assert p['errors']==3 and p['items'][1]['row']==6  # CSV physical line, including previous multiline fields
+    assert 'DO-NOT-LEAK' not in json.dumps(p)
+    assert client.post('/api/submissions/batch/import',json={'preview_id':p['preview_id']}).status_code==400
+    assert client.get('/api/submissions').json()==[]
+    rows=subs.template_rows(True);rows[0][9]='different';first=import_five(client,rows=rows)
+    rows[0][8]='modified same version'
+    assert upload(client,rows=rows)['errors']==1
+    rows[0][2]='v2'
+    new=client.post('/api/submissions/batch/import',json={'preview_id':upload(client,rows=rows)['preview_id']}).json()
+    assert new['imported']==1 and len(client.get('/api/submissions').json())==6
+
+
+def test_credentials_encrypted_and_not_echoed(client,monkeypatch):
+    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**k:[(2,1,6,'',('93.184.216.34',443))])
+    rows=subs.template_rows(False);rows[0][4]='sk-unique-secret-for-test';rows[0][5]=''
+    p=upload(client,rows=rows)
+    assert p['errors']==0
+    client.post('/api/submissions/batch/import',json={'preview_id':p['preview_id']})
+    for path in ('/api/submissions','/api/models','/api/evaluation-batches'):
+        assert rows[0][4] not in client.get(path).text
+    with db() as c:
+        assert rows[0][4] not in ' '.join(r[0] or '' for r in c.execute('SELECT secret FROM models'))
+        assert rows[0][4] not in ' '.join(r[0] or '' for r in c.execute('SELECT secret FROM import_previews'))
+    assert client.get('/api/runs').json()==[]
+
+
+def test_template_files(client):
+    for fmt in ('csv','xlsx'):
+        r=client.get('/api/submissions/template?mock=true&format='+fmt)
+        assert r.status_code==200
+        p=client.post('/api/submissions/batch/preview',files={'file':('mock.'+fmt,r.content)})
+        assert p.status_code==200 and p.json()['ready']==5
+    xlsx=client.get('/api/submissions/template?format=xlsx').content
+    b=load_workbook(io.BytesIO(xlsx));assert b.active.max_row==6 and b.active.freeze_panes=='A2'
+
+
+def test_parser_exception_does_not_echo_cells(client,monkeypatch):
+    content=subs.spreadsheet_bytes(subs.FIELDS,subs.template_rows(True))
+    def broken(*args,**kwargs):raise ValueError('malformed numeric cell: sk-private-source-secret')
+    monkeypatch.setattr(subs,'load_workbook',broken)
+    r=client.post('/api/submissions/batch/preview',files={'file':('bad.xlsx',content)})
+    assert r.status_code==400 and 'sk-private-source-secret' not in r.text
+
+
+@pytest.mark.parametrize('mode,calls',[('single_pass',1),('self_refine',3),('majority_vote',3)])
+def test_full_batch_pipeline(imported,mode,calls):
+    c=imported;ids=import_five(c)
+    payload=batch_payload(ids,mode=mode,calls=calls)
+    preview=c.post('/api/evaluation-batches/preview',json=payload)
+    assert preview.status_code==200 and preview.json()['max_external_requests']==0
+    assert preview.json()['max_requests']==5*4*calls
+    r=c.post('/api/evaluation-batches',json=payload);assert r.status_code==200,r.text
+    bid=r.json()['batch_id']
+    assert c.post('/api/evaluation-batches',json=payload).json()['batch_id']==bid
+    before=c.get('/api/evaluation-batches/'+bid).json()
+    assert before['status']=='draft' and before['actual_calls']==0
+    assert c.post('/api/evaluation-batches/'+bid+'/start').json()['started']
+    assert not c.post('/api/evaluation-batches/'+bid+'/start').json()['started']
+    b=wait_batch(c,bid)
+    assert b['status']=='completed' and b['finished']==5 and b['completed']==20
+    assert b['actual_calls']==20*calls and b['external_api_calls']==0
+    data=c.get('/api/evaluation-batches/'+bid+'/analytics').json()
+    assert len(data['groups'])==1 and len(data['groups'][0]['entries'])==5
+    assert all(r['kind']=='mock' for r in data['groups'][0]['entries'])
+    assert c.get('/api/leaderboard').json()==[]
+    assert sum(r['completed'] for r in b['runs'])==b['completed']
+    assert all(r['mean_question_seconds'] is not None for r in data['groups'][0]['entries'])
+    for fmt in ('html','json','csv','xlsx'):
+        for audience in ('public','admin'):
+            r=c.get(f'/api/evaluation-batches/{bid}/export?format={fmt}&audience={audience}')
+            assert r.status_code==200,r.text
+            if fmt!='xlsx':
+                assert 'api_key' not in r.text and 'api_key_env' not in r.text and 'gt_answer' not in r.text
+                assert '仅根据当前截图' not in r.text
+            if fmt=='html':
+                assert r.text.count('<svg ')==4 and 'src="https://' not in r.text and 'href="https://' not in r.text
+                assert 'Mock' in r.text and '平均单题' in r.text
+                assert "style-src 'unsafe-inline'" in r.headers['content-security-policy']
+    group=data['groups'][0]['id']
+    for chart in ('ranking','dimensions','radar','efficiency'):
+        svg=c.get(f'/api/evaluation-batches/{bid}/charts/{chart}.svg?group={group}').text
+        import xml.etree.ElementTree as ET
+        assert ET.fromstring(svg).tag.endswith('svg')
+
+
+def test_missing_images_official_and_budget_gate(imported):
+    c=imported;ids=import_five(c)
+    assert c.post('/api/evaluation-batches',json=batch_payload(ids,official=True)).status_code==400
+    assert c.post('/api/evaluation-batches',json=batch_payload(ids,mode='majority_vote',calls=4)).status_code==400
+    assert c.post('/api/evaluation-batches',json=batch_payload(ids,calls=3)).status_code==400
+    assert c.post('/api/evaluation-batches',json=batch_payload(ids,submission_ids=ids+[ids[0]])).status_code==400
+    assert c.get('/api/evaluation-batches').json()==[]
+
+
+def test_failed_model_does_not_stop_others(imported,monkeypatch):
+    c=imported;ids=import_five(c)
+    import app.services.runs as runs
+    original=runs.make_client
+    class Broken:
+        async def complete(self,*args):raise httpx.ConnectError('SECRET_PROVIDER_MESSAGE')
+    monkeypatch.setattr(runs,'make_client',lambda m,k:Broken() if m['name']=='Mock 队伍 2' else original(m,k))
+    b=run_batch(c,ids)
+    assert b['finished']==5 and b['error_count']==4
+    assert sum(r['error_count']==0 for r in b['runs'])==4 and b['actual_calls']==20
+    assert 'SECRET_PROVIDER_MESSAGE' not in c.get('/api/evaluation-batches/'+b['batch_id']+'/export?format=json&audience=admin').text
+
+
+def test_stop_and_persistent_recovery(imported,monkeypatch):
+    c=imported;ids=import_five(c)
+    import app.services.runs as runs
+    class Slow:
+        async def complete(self,*args):
+            await asyncio.sleep(.1);return {'output':'A','usage':{}}
+    monkeypatch.setattr(runs,'make_client',lambda *a:Slow())
+    bid=c.post('/api/evaluation-batches',json=batch_payload(ids,limit=20,question_ids=[])).json()['batch_id']
+    c.post('/api/evaluation-batches/'+bid+'/start');time.sleep(.02)
+    assert c.post('/api/evaluation-batches/'+bid+'/stop').status_code==200
+    b=wait_batch(c,bid)
+    assert b['actual_calls']<=1 and b['status']=='stopped_or_interrupted'
+    assert c.get('/api/evaluation-batches/'+bid+'/leaderboard').json()['groups']==[]
+    other=c.post('/api/evaluation-batches',json=batch_payload(ids)).json()['batch_id']
+    with db() as con:
+        rid=con.execute('SELECT run_id FROM batch_entries WHERE batch_id=?',(other,)).fetchone()[0]
+        con.execute("UPDATE runs SET status='running' WHERE id=?",(rid,))
+    init_db()
+    assert c.get('/api/runs/'+rid).json()['status']=='interrupted'
+    assert c.get('/api/evaluation-batches/'+other).json()['failed_or_interrupted']==1
+
+
+def test_filter_fairness_rerun_and_xss(imported):
+    c=imported;rows=subs.template_rows(True);rows[0][1]='<script>alert("x")</script>'
+    ids=import_five(c,rows=rows);b=run_batch(c,ids);bid=b['batch_id']
+    d=c.get('/api/evaluation-batches/'+bid+'/analytics?team_id=team-1&top=5').json()
+    assert len(d['groups'][0]['entries'])==1 and d['selected_teams']==1
+    h=c.get('/api/evaluation-batches/'+bid+'/export?team_id=team-1').text
+    assert '<script>alert' not in h and '&lt;script&gt;' in h
+    assert c.get('/api/evaluation-batches/'+bid+'/analytics?team_id=unknown').status_code==400
+    # Simulate an historical differing-mode record: it must become a separate group.
+    with db() as con:
+        rid=b['runs'][0]['run_id'];r=con.execute('SELECT body FROM runs WHERE id=?',(rid,)).fetchone()
+        body=json.loads(r[0]);body['mode']='majority_vote'
+        con.execute('UPDATE runs SET body=? WHERE id=?',(dumps(body),rid))
+    assert len(c.get('/api/evaluation-batches/'+bid+'/analytics').json()['groups'])==2
+    qid=c.get('/api/runs/'+rid).json()['results'][0]['question_id']
+    c.post('/api/runs/'+rid+'/infrastructure',json={'question_ids':[qid],'reason':'主办方资源测试故障'})
+    replacement=c.post('/api/runs/'+rid+'/rerun').json()['run_id']
+    for _ in range(500):
+        if c.get('/api/runs/'+replacement).json()['status']=='completed':break
+        time.sleep(.01)
+    runs=c.get('/api/evaluation-batches/'+bid).json()['runs']
+    assert len(runs)==5 and replacement in [r['run_id'] for r in runs] and rid not in [r['run_id'] for r in runs]
+
+
+def test_blank_chart_and_timing_not_zero(imported):
+    c=imported;ids=import_five(c)
+    bid=c.post('/api/evaluation-batches',json=batch_payload(ids)).json()['batch_id']
+    html=c.get('/api/evaluation-batches/'+bid+'/export').text
+    assert '暂无可排名成绩' in html and '<svg' not in html
+    assert len(c.get('/api/evaluation-batches/'+bid+'/leaderboard').json()['excluded'])==5
+    inline=c.get('/api/evaluation-batches/'+bid+'/export?format=html&download=false')
+    assert inline.headers['content-disposition'].startswith('inline')

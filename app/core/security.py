@@ -3,22 +3,25 @@ import ipaddress
 import os
 import re
 import socket
+import threading
 from urllib.parse import urlsplit
 from cryptography.fernet import Fernet
 from httpcore._backends.auto import AutoBackend
 from app.settings import HOME
+_CIPHER_LOCK = threading.RLock()
 
 
 def cipher():
-    key = os.environ.get('WARGAME_SECRET_KEY')
-    if not key:
-        path = HOME / '.secret.key'
-        if not path.exists():
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-            with os.fdopen(fd, 'wb') as stream:
-                stream.write(Fernet.generate_key())
-        key = path.read_bytes()
-    return Fernet(key)
+    with _CIPHER_LOCK:
+        key = os.environ.get('WARGAME_SECRET_KEY')
+        if not key:
+            path = HOME / '.secret.key'
+            if not path.exists():
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                with os.fdopen(fd, 'wb') as stream:
+                    stream.write(Fernet.generate_key())
+            key = path.read_bytes()
+        return Fernet(key)
 
 
 def encrypt(value):

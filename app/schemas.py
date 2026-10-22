@@ -55,3 +55,20 @@ class ImageMapping(Strict):
 class InfraMark(Strict):
     question_ids: list[str] = Field(min_length=1)
     reason: str = Field(min_length=5, max_length=1000)
+
+
+class ImportConfirm(Strict):
+    preview_id: str
+
+
+class BatchConfig(Strict):
+    request_key: str = Field(min_length=8, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
+    submission_ids: list[str] = Field(min_length=1, max_length=100)
+    mode: Literal['single_pass', 'self_refine', 'majority_vote'] = 'single_pass'
+    calls: int = Field(default=1, ge=1, le=100)
+    early_stop: bool = False
+    official: bool = False
+    dimension: Literal['L2_main', 'L3_main', 'L1_sub', 'L2_sub'] | None = None
+    question_ids: list[str] = Field(default_factory=list, max_length=2000)
+    limit: int | None = Field(default=None, ge=1, le=10000)
