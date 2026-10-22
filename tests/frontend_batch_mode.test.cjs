@@ -25,6 +25,7 @@ test('sidebar retains nine routes in the required groups and test switch default
   const html=fs.readFileSync('app/web/index.html','utf8');
   const nav=html.match(/<nav[\s\S]*?<\/nav>/)[0];
   assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['dataset','submissions','batches','analytics','reports','models','prompts','create','monitor']);
+  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04','05','01','02','03','04']);
   assert.match(nav,/正式比赛/);assert.match(nav,/开发者选项/);
   assert.match(html,/<input[^>]+id="batch-test-mode"[^>]+role="switch"[^>]+checked/);
 });
