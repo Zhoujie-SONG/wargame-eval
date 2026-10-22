@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+data/*.sqlite*
+data/.secret.key
+data/images/*
+data/processed/*
+results/*
+!results/.gitkeep
+.env
+.env.*
+!.env.example
+selected_240_six_groups*.zip
+data/raw/
+.publish-tools/

@@ -1,0 +1,15 @@
+competition:
+  max_calls_per_question: 3
+  timeout_per_question_seconds: 120
+evaluation:
+  weights:
+    L2_main: 0.35
+    L3_main: 0.35
+    L1_sub: 0.15
+    L2_sub: 0.15
+dataset:
+  expected_counts:
+    L2_main: 179
+    L3_main: 61
+    L1_sub: 757
+    L2_sub: 282

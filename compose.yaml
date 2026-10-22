@@ -1,0 +1,9 @@
+services:
+  wargame:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/opt/wargame/data
+      - ./config:/opt/wargame/config
+    restart: unless-stopped

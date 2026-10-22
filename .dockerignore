@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+.pytest_cache
+data
+results
+tests
+*.log
+selected_240_six_groups*.zip
+.publish-tools
+.env
+.env.*
