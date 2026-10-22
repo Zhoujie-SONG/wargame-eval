@@ -8,7 +8,17 @@ from app.services.runs import prepare_run,report,load_run,now,dataset_digest,get
 from app.services.images import mock_image
 
 
+def validate_scope(data):
+    if data.official and (data.dimension is not None or data.limit is not None or data.question_ids):
+        raise ValueError('正式比赛必须全量评测 1,279 道 QA，不允许维度、题数或题目 ID 筛选')
+
+
+def mode_label(official):
+    return '正式比赛｜全量 1,279 道 QA' if official else '批量测试｜非正式成绩'
+
+
 def preview_batch(data):
+    validate_scope(data)
     if len(data.submission_ids)!=len(set(data.submission_ids)):raise ValueError('参赛方案不可重复')
     if data.mode=='single_pass' and data.calls!=1:raise ValueError('Single-pass 固定一次，请将调用次数设为 1')
     if data.mode!='self_refine' and data.early_stop:raise ValueError('仅 Self-refine 支持提前结束')
@@ -32,7 +42,7 @@ def preview_batch(data):
     summary={'teams':len(plans),'questions_per_team':count,'total_qa':len(plans)*count,
              'max_requests':len(plans)*count*actual,
              'max_external_requests':sum(count*actual for _,b,_ in plans if b['model']['provider']!='mock'),
-             'mode':data.mode,'calls':actual,'official':data.official,'budget':cfg['competition'],
+             'mode':data.mode,'calls':actual,'official':data.official,'mode_label':mode_label(data.official),'budget':cfg['competition'],
              'real_images_complete':all(q['image'] and q['image']['real'] for _,b,_ in plans for q in b['questions']),
              'dataset_complete':count==sum(cfg['dataset']['expected_counts'].values()),
              'items':[{'team_id':s['team_id'],'team_name':s['name'],'submission_version':s['version'],
@@ -41,6 +51,7 @@ def preview_batch(data):
 
 
 def create_batch(data):
+    validate_scope(data)
     with db() as c:
         old=c.execute('SELECT id,body FROM evaluation_batches WHERE request_key=?',(data.request_key,)).fetchone()
     request=data.model_dump(exclude={'request_key'})
@@ -64,13 +75,18 @@ def create_batch(data):
     return identity
 
 
-def start_batch(identity):
+def start_batch(identity,confirm_official=False):
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
-        row=c.execute('SELECT started,stopped FROM evaluation_batches WHERE id=?',(identity,)).fetchone()
+        row=c.execute('SELECT started,stopped,body FROM evaluation_batches WHERE id=?',(identity,)).fetchone()
         if not row:raise ValueError('批次不存在')
         if row['stopped']:raise ValueError('批次已停止，请创建新批次')
         if row['started']:return {'batch_id':identity,'started':False,'message':'批次已经启动，不重复排队'}
+        meta=json.loads(row['body'])
+        if meta['plan']['official']:
+            from app.schemas import BatchConfig
+            validate_scope(BatchConfig(request_key='frozen-batch',**meta['request']))
+            if not confirm_official:raise ValueError('正式比赛启动前必须主动确认批次、队伍、题数、请求上限和 API 费用')
         ids=[r[0] for r in c.execute('SELECT run_id FROM batch_entries WHERE batch_id=?',(identity,))]
         c.execute('UPDATE evaluation_batches SET started=1 WHERE id=?',(identity,))
         for rid in ids:c.execute("UPDATE runs SET status='queued' WHERE id=? AND status='draft'",(rid,))
@@ -100,6 +116,7 @@ def get_batch(identity):
     starts=[r['started_at'] for r in runs if r['started_at']];ends=[r['finished_at'] for r in runs if r['finished_at']]
     elapsed=(datetime.fromisoformat(max(ends) if ends and not active else now())-datetime.fromisoformat(min(starts))).total_seconds() if starts else 0
     return {'batch_id':identity,'name':row['name'],'created_at':row['created_at'],'status':status,'started':bool(row['started']),
+            'official':meta['plan']['official'],'mode_label':mode_label(meta['plan']['official']),
             'teams':len(runs),'queued':statuses.count('queued'),'running':statuses.count('running'),
             'finished':statuses.count('completed'),'failed_or_interrupted':sum(s in ('interrupted','infrastructure_error','stopped') for s in statuses),
             'total':total,'completed':completed,'progress':completed/total if total else 0,'elapsed_seconds':elapsed,
@@ -139,6 +156,7 @@ def analytics(identity,team_ids=None,top=10,audience='public'):
         groups.append({'id':dataset_digest(key)[:16],'kind':key[0],'cohort':key[1],'mode':key[2],'calls':key[3],
                        'early_stop':key[4],'entries':entries,'top_entries':entries[:top] if top else entries})
     return {'batch_id':identity,'name':batch['name'],'audience':audience,'created_at':batch['created_at'],'status':batch['status'],
+            'official':batch['official'],'mode_label':batch['mode_label'],
             'teams':batch['teams'],'selected_teams':len(batch['runs']) if selected is None else len(selected),
             'finished':batch['finished'],'qa_completed':batch['completed'],'qa_total':batch['total'],
             'actual_calls':batch['actual_calls'],'external_api_calls':batch['external_api_calls'],

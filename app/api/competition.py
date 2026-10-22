@@ -3,7 +3,7 @@ import json
 from typing import Literal
 from fastapi import APIRouter, UploadFile, File, Query
 from fastapi.responses import Response
-from app.schemas import BatchConfig, ImportConfirm
+from app.schemas import BatchConfig, BatchStart, ImportConfirm
 from app.services import submissions as subs
 from app.services import competition as comp
 from app.services.competition_report import chart_svg,render_html,DIMENSIONS,CHARTS
@@ -55,7 +55,7 @@ def progress(batch_id:str):return comp.get_batch(batch_id)
 
 
 @router.post('/evaluation-batches/{batch_id}/start')
-def start(batch_id:str):return comp.start_batch(batch_id)
+def start(batch_id:str,value:BatchStart|None=None):return comp.start_batch(batch_id,value.confirm_official if value else False)
 
 
 @router.post('/evaluation-batches/{batch_id}/stop')

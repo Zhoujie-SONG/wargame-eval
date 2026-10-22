@@ -26,6 +26,8 @@ def dataset_digest(rows):
 
 
 def prepare_run(data, context=None):
+    if data.official and (data.dimension is not None or data.limit is not None or data.question_ids):
+        raise ValueError('正式比赛必须全量评测 1,279 道 QA，不允许维度、题数或题目 ID 筛选')
     cfg = context['config'] if context else settings()
     cap = cfg['competition']['max_calls_per_question']
     if not 1 <= data.calls <= cap:
@@ -36,6 +38,8 @@ def prepare_run(data, context=None):
     if not model_row or not prompt_row:
         raise ValueError('模型或 Prompt 配置不存在')
     model = json.loads(model_row['body'])
+    if data.official and model['provider'] == 'mock':
+        raise ValueError('正式比赛禁止使用 Mock 模型，请选择真实模型')
     prompt = json.loads(prompt_row['body'])
     all_questions = context['questions'] if context else question_rows()
     rows = [dict(q) for q in all_questions if (not data.dimension or q['level']+'_'+q['role'] == data.dimension)

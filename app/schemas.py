@@ -68,7 +68,11 @@ class BatchConfig(Strict):
     mode: Literal['single_pass', 'self_refine', 'majority_vote'] = 'single_pass'
     calls: int = Field(default=1, ge=1, le=100)
     early_stop: bool = False
-    official: bool = False
+    official: bool = Field(default=False, description='False 为批量测试，True 为全量正式比赛')
     dimension: Literal['L2_main', 'L3_main', 'L1_sub', 'L2_sub'] | None = None
     question_ids: list[str] = Field(default_factory=list, max_length=2000)
     limit: int | None = Field(default=None, ge=1, le=10000)
+
+
+class BatchStart(Strict):
+    confirm_official: bool = False

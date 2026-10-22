@@ -35,6 +35,69 @@ def batch_payload(ids,**kwargs):
     return p
 
 
+@pytest.mark.parametrize('scope',[{'limit':1},{'limit':1279},{'dimension':'L2_main'},
+                                  {'question_ids':['G01-01-CORE']}])
+def test_official_rejects_explicit_scope_before_preview_or_save(imported,scope):
+    c=imported;ids=import_five(c)
+    p=batch_payload(ids,official=True,question_ids=[],**{k:v for k,v in scope.items() if k!='question_ids'})
+    p.update(scope)
+    for endpoint in ('/api/evaluation-batches/preview','/api/evaluation-batches'):
+        r=c.post(endpoint,json=p)
+        assert r.status_code==400 and '不允许' in r.json()['detail']
+    assert c.get('/api/evaluation-batches').json()==[]
+    assert c.get('/api/runs').json()==[]
+
+
+def test_official_mock_missing_images_full_gate_and_confirmation(imported,monkeypatch):
+    c=imported;ids=import_five(c)
+    p=batch_payload(ids[:1],official=True,question_ids=[])
+    for endpoint in ('/api/evaluation-batches/preview','/api/evaluation-batches'):
+        r=c.post(endpoint,json=p)
+        assert r.status_code==400 and 'Mock' in r.text
+    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**k:[(2,1,6,'',('93.184.216.34',443))])
+    rows=subs.template_rows(False)[:1];rows[0][0]='real-team';rows[0][4]='fixture-only-secret';rows[0][5]=''
+    real=import_five(c,rows=rows)
+    p=batch_payload(real,official=True,question_ids=[])
+    for endpoint in ('/api/evaluation-batches/preview','/api/evaluation-batches'):
+        r=c.post(endpoint,json=p)
+        assert r.status_code==400 and '真实截图' in r.text
+    from test_system import png
+    from app.db import question_rows
+    image=c.post('/api/images',files={'file':('fixture.png',png('gold'))},data={'real':'true'}).json()
+    questions=question_rows()
+    mappings=[dict(replay_id=r,image_step=s,image_id=image['id']) for r,s in {(q['replay_id'],q['image_step']) for q in questions}]
+    assert c.post('/api/images/map',json=mappings).status_code==200
+    # Even an explicit list containing the whole dataset is prohibited in official mode.
+    r=c.post('/api/evaluation-batches/preview',json=dict(p,question_ids=[q['question_id'] for q in questions]))
+    assert r.status_code==400
+    preview=c.post('/api/evaluation-batches/preview',json=p)
+    assert preview.status_code==200,preview.text
+    assert preview.json()['official'] and preview.json()['questions_per_team']==1279
+    assert preview.json()['mode_label']=='正式比赛｜全量 1,279 道 QA'
+    bid=c.post('/api/evaluation-batches',json=p).json()['batch_id']
+    assert c.get('/api/evaluation-batches/'+bid).json()['status']=='draft'
+    queued=[]
+    from app.services import competition
+    monkeypatch.setattr(competition.runner,'enqueue',queued.append)
+    assert c.post('/api/evaluation-batches/'+bid+'/start').status_code==400
+    assert c.post('/api/evaluation-batches/'+bid+'/start',json={'confirm_official':False}).status_code==400
+    assert not queued
+    assert c.post('/api/evaluation-batches/'+bid+'/start',json={'confirm_official':True}).status_code==200
+    assert len(queued)==1  # Queue stub: no real API requests are made.
+    assert c.get('/api/evaluation-batches/'+bid+'/analytics').json()['official']
+
+
+def test_test_mode_partial_classification(imported):
+    c=imported;ids=import_five(c)
+    b=run_batch(c,ids[:1],official=False,dimension='L2_main',limit=1,question_ids=[])
+    assert b['completed']==1 and not b['official']
+    assert b['mode_label']=='批量测试｜非正式成绩'
+    assert b['external_api_calls']==0 and b['runs'][0]['kind']=='mock'
+    assert c.get('/api/leaderboard').json()==[]
+    d=c.get('/api/evaluation-batches/'+b['batch_id']+'/analytics').json()
+    assert not d['official'] and len(d['groups'])==1
+
+
 def wait_batch(c,bid):
     for _ in range(1000):
         b=c.get('/api/evaluation-batches/'+bid).json()

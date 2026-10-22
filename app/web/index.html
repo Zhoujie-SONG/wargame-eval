@@ -2,9 +2,18 @@
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>兵棋多模态测评 · V1.2</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script></head>
 <body>
-<aside><div class="brand">兵棋多模态测评<small>竞赛执行平台 · V1.2</small></div><nav>
-<button data-tab="dataset" class="active">01　数据集管理</button><button data-tab="models">02　模型配置</button><button data-tab="prompts">03　Prompt 与推理</button><button data-tab="create">04　创建测评任务</button><button data-tab="monitor">05　任务监控</button><button data-tab="reports">06　报告与排行榜</button>
-<button data-tab="submissions">07　批量参赛管理</button><button data-tab="batches">08　批量测评与监控</button><button data-tab="analytics">09　竞赛分析与导出</button></nav><p class="aside-note">主办方本地管理原型<br>Mock 成绩仅用于联调</p></aside>
+<aside><div class="brand">兵棋多模态测评<small>竞赛执行平台 · V1.2</small></div><nav aria-label="管理导航">
+<div class="nav-group" aria-labelledby="competition-nav"><h2 id="competition-nav">正式比赛</h2>
+<button data-tab="dataset" class="active">01　数据集管理</button>
+<button data-tab="submissions">07　批量参赛管理</button>
+<button data-tab="batches">08　批量测评与监控</button>
+<button data-tab="analytics">09　竞赛分析与导出</button>
+<button data-tab="reports">06　报告与排行榜</button></div>
+<div class="nav-group" aria-labelledby="developer-nav"><h2 id="developer-nav">开发者选项</h2>
+<button data-tab="models">02　模型配置</button>
+<button data-tab="prompts">03　Prompt 与推理</button>
+<button data-tab="create">04　创建测评任务</button>
+<button data-tab="monitor">05　任务监控</button></div></nav><p class="aside-note">主办方本地管理原型<br>Mock 成绩仅用于联调</p></aside>
 <main><header><div><span class="eyebrow">WARGAME EVALUATION</span><h1 id="title">数据集管理</h1></div><span id="health" class="badge">连接中</span></header>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <section id="dataset" class="page">
@@ -37,10 +46,11 @@
 <div class="panel"><h2>方案版本与关联配置</h2><p>API Key 加密保存，不回显。每队可保留多个版本；批次内每队只允许选一个版本。</p><button id="refresh-submissions">刷新</button><div id="submission-list"></div></div></section>
 <section id="batches" class="page" hidden>
 <div class="panel"><h2>选择队伍方案</h2><div class="row"><input id="team-filter" placeholder="筛选队伍或模型" aria-label="筛选队伍"><button id="select-teams">全选筛选结果</button><button id="clear-teams" class="secondary">全部取消</button></div><div id="batch-submissions"></div></div>
-<div class="panel"><h2>统一测评规则 · 创建与启动分离</h2><form id="batch-form" class="grid2"><label>比赛 / 批次名称<input name="name" value="Mock 批量联调" required maxlength="100"></label><label>统一推理模式<select name="mode"><option value="single_pass">Single-pass · 固定一次</option><option value="self_refine">Self-refine · 检查修正</option><option value="majority_vote">Majority-vote · 独立投票</option></select></label><label>每题调用次数<input name="calls" value="1" type="number" min="1" readonly required></label><label>维度范围<select name="dimension"><option value="">全部维度</option><option value="L2_main">L2 主问题</option><option value="L3_main">L3 主问题</option><option value="L1_sub">L1 子问题</option><option value="L2_sub">L2 子问题</option></select></label><label>每队最多题数（留空全量）<input name="limit" type="number" min="1" placeholder="建议先用 5 题联调"></label><label>指定题目 ID（可选）<textarea name="question_ids" rows="2"></textarea></label><label class="inline"><input name="early_stop" type="checkbox" disabled>统一开启 Self-refine 稳定答案提前结束</label><label class="inline"><input name="official" type="checkbox">正式全量测评</label><div class="row"><button>预览计划与请求上限</button><button id="save-batch" type="button" disabled>保存冻结批次（暂不启动）</button></div></form><div id="batch-preview"></div></div>
+<div class="panel"><h2>统一测评规则 · 创建与启动分离</h2><form id="batch-form" class="grid2"><div class="batch-mode"><label class="mode-switch"><input id="batch-test-mode" name="batch_test" type="checkbox" role="switch" checked aria-describedby="batch-mode-help"><span class="switch-track" aria-hidden="true"></span>批量测试</label><strong id="batch-mode-label" class="tag" role="status">批量测试｜非正式成绩</strong><p id="batch-mode-help">开启：用于小规模调试，可选择题目数量和维度，成绩不进入正式排行榜。</p><small>关闭后进入正式比赛，必须完整评测所有 1,279 道 QA。此开关不改变推理策略。</small></div><label>比赛 / 批次名称<input name="name" value="Mock 批量联调" required maxlength="100"></label><label>统一推理模式<select name="mode"><option value="single_pass">Single-pass · 固定一次</option><option value="self_refine">Self-refine · 检查修正</option><option value="majority_vote">Majority-vote · 独立投票</option></select></label><label>每题调用次数<input name="calls" value="1" type="number" min="1" readonly required></label><label>维度范围<select name="dimension"><option value="">全部维度</option><option value="L2_main">L2 主问题</option><option value="L3_main">L3 主问题</option><option value="L1_sub">L1 子问题</option><option value="L2_sub">L2 子问题</option></select></label><label>每队最多题数（留空全量）<input name="limit" type="number" min="1" placeholder="建议先用 5 题联调"></label><label>指定题目 ID（可选）<textarea name="question_ids" rows="2"></textarea></label><label class="inline"><input name="early_stop" type="checkbox" disabled>统一开启 Self-refine 稳定答案提前结束</label><div class="row"><button>预览计划与请求上限</button><button id="save-batch" type="button" disabled>保存冻结批次（暂不启动）</button></div></form><div id="batch-preview"></div></div>
 <div class="panel"><h2>批次列表与整体进度 <small>每 3 秒刷新</small></h2><div id="batch-list"></div></div><div id="batch-progress" class="panel" hidden></div></section>
 <section id="analytics" class="page" hidden>
 <div class="panel"><h2>选择竞赛批次</h2><div class="row"><select id="analytics-batch" aria-label="分析批次"></select><select id="analytics-top" aria-label="图表 Top N"><option value="5">Top 5</option><option value="10" selected>Top 10</option><option value="0">全部队伍</option></select><select id="analytics-audience" aria-label="报告版本"><option value="public">公开版</option><option value="admin">管理员统计详细版</option></select><button id="refresh-analytics">刷新分析</button></div><p>同批次也会按 Mock / 正式类型、数据与截图、模式、预算、提前结束设置分别排名。未完成或主办方故障的任务不进入最终排名。不进行多批次比较或其他模式成绩推断。</p><div id="analytics-teams"></div><div id="competition-exports" class="row"></div></div><div id="competition-summary"></div><div id="competition-groups"></div></section>
 <section id="run-detail" class="panel" hidden></section>
 <footer>V1.2 · 本地单管理员原型。聚合代理内部调用不可观测，平台预算只限制可见的请求。正式比赛前请准备真实截图与有效模型凭据。</footer>
-</main></body></html>
+</main><dialog id="official-start-dialog" aria-labelledby="official-start-title"><h2 id="official-start-title">确认启动正式比赛</h2><div id="official-start-summary"></div><p class="warn">启动后将调用参赛队伍的真实模型 API，可能产生实际 API 调用费用。</p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认并启动正式比赛</button></form></dialog>
+</body></html>
