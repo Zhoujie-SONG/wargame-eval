@@ -2,8 +2,8 @@ import asyncio
 import json
 from typing import Literal
 from fastapi import APIRouter, UploadFile, File, Query
-from fastapi.responses import Response
-from app.schemas import BatchConfig, BatchStart, ImportConfirm
+from fastapi.responses import Response, JSONResponse
+from app.schemas import BatchConfig, BatchStart, BatchLaunch, ImportConfirm
 from app.services import submissions as subs
 from app.services import competition as comp
 from app.services.competition_report import chart_svg,render_html,DIMENSIONS,CHARTS
@@ -46,6 +46,20 @@ def create_batch(value:BatchConfig):return {'batch_id':comp.create_batch(value),
 def batches():return comp.list_batches()
 
 
+@router.post('/evaluation-batches/start-new')
+async def start_new(value:BatchLaunch):
+    if not value.confirm_official:raise ValueError('请主动确认正式比赛规模及 API 费用后启动')
+    data=BatchConfig(**value.model_dump(exclude={'confirm_official','preview_fingerprint'}))
+    identity=await asyncio.to_thread(comp.create_batch,data,value.preview_fingerprint)
+    return dispatch_batch(identity,True)
+
+
+def dispatch_batch(identity,confirmed):
+    try:return comp.start_batch(identity,confirmed)
+    except comp.BatchDispatchError as exc:
+        return JSONResponse(status_code=503,content={'detail':str(exc),'batch_id':identity,'status':'draft','retryable':True})
+
+
 @router.get('/evaluation-batches/{batch_id}')
 def batch(batch_id:str):return comp.get_batch(batch_id)
 
@@ -55,7 +69,7 @@ def progress(batch_id:str):return comp.get_batch(batch_id)
 
 
 @router.post('/evaluation-batches/{batch_id}/start')
-def start(batch_id:str,value:BatchStart|None=None):return comp.start_batch(batch_id,value.confirm_official if value else False)
+async def start(batch_id:str,value:BatchStart|None=None):return dispatch_batch(batch_id,value.confirm_official if value else False)
 
 
 @router.post('/evaluation-batches/{batch_id}/stop')

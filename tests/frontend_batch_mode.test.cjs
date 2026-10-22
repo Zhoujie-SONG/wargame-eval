@@ -4,85 +4,86 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const crypto=require('node:crypto');
 
-function setup(){
+function setup(storage=new Map()){
   const nodes=new Map();
-  function $(id){if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,innerHTML:'',textContent:'',replaceChildren(){this.innerHTML=''}});return nodes.get(id)}
-  const fields={};for(const name of ['name','mode','calls','dimension','limit','question_ids','early_stop','batch_test'])fields[name]=$('field:'+name);
-  Object.assign(fields.name,{value:'测试批次'});fields.mode.value='single_pass';fields.calls.value='1';fields.batch_test.checked=true;
-  $('#batch-form').elements=fields;
-  nodes.set('#batch-test-mode',fields.batch_test);
+  function $(id){if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,innerHTML:'',textContent:'',querySelectorAll(){return []},scrollIntoView(){},setCustomValidity(v){this.validationMessage=v}});return nodes.get(id)}
+  const fields={};for(const name of ['name','mode','calls','early_stop'])fields[name]=$('field:'+name);
+  fields.name.value='正式比赛';fields.mode.value='self_refine';fields.calls.value='3';
+  $('#batch-form').elements=fields;$('#batch-form').querySelectorAll=()=>Object.values(fields);
   const context={$,crypto,URLSearchParams,Set,Image:class{},labels:{},state:{settings:{competition:{max_calls_per_question:3}}},
     form:()=>Object.fromEntries(Object.entries(fields).filter(([,v])=>!v.disabled).map(([k,v])=>[k,v.value])),
-    e:String,table:()=>'',action:fn=>fn,options:()=>{},notice:()=>{},setInterval:()=>{},
+    e:String,table:(h,r)=>JSON.stringify(r),action:fn=>fn,options:()=>{},notice:()=>{},setInterval:()=>{},percent:String,
+    sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     document:{addEventListener:()=>{},body:{addEventListener:()=>{}},querySelectorAll:()=>[]},api:async()=>{throw Error('Unexpected API call')}};
   vm.createContext(context);
-  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,updateBatchMode,confirmOfficialStart,loadAnalytics,cs};})();');
+  const app=fs.readFileSync('app/web/app.js','utf8');
+  vm.runInContext(app.slice(app.indexOf('function populateCalls('),app.indexOf('function selectPrompt(')),context);
+  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadAnalytics,cs};})();');
   vm.runInContext(source,context);
-  return {context,fields,$,a:context.testAPI};
+  return {context,fields,$,a:context.testAPI,storage};
 }
+const plan={fingerprint:'f'.repeat(64),teams:2,questions_per_team:1279,max_requests:7674,max_external_requests:7674,mode:'self_refine',calls:3,real_images_complete:true};
+function answerDialog($,answer){const d=$('#official-start-dialog');let close;d.addEventListener=(event,fn)=>close=fn;d.showModal=()=>{d.returnValue=answer;close()}}
 
-test('sidebar retains nine routes in the required groups and test switch defaults on',()=>{
-  const html=fs.readFileSync('app/web/index.html','utf8');
-  const nav=html.match(/<nav[\s\S]*?<\/nav>/)[0];
+test('group numbering remains independent; formal form has one primary action and no test controls',()=>{
+  const html=fs.readFileSync('app/web/index.html','utf8'),nav=html.match(/<nav[\s\S]*?<\/nav>/)[0],form=html.match(/<form id="batch-form"[\s\S]*?<\/form>/)[0];
   assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['dataset','submissions','batches','analytics','reports','models','prompts','create','monitor']);
   assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04','05','01','02','03','04']);
-  assert.match(nav,/正式比赛/);assert.match(nav,/开发者选项/);
-  assert.match(html,/<input[^>]+id="batch-test-mode"[^>]+role="switch"[^>]+checked/);
+  assert.doesNotMatch(form,/batch_test|batch-test-mode|name="(?:dimension|limit|question_ids)"|save-batch|readonly/);
+  assert.equal((form.match(/<button/g)||[]).length,1);assert.match(form,/开始正式测评/);assert.match(form,/value="self_refine" selected/);
 });
 
-test('test/official toggle clears scope and invalidates the saved preview without changing strategy',()=>{
-  const {a,fields,$}=setup();
-  fields.mode.value='majority_vote';fields.calls.value='3';fields.dimension.value='L2_main';fields.limit.value='5';fields.question_ids.value='Q1,Q2';
-  assert.equal(a.batchPayload().official,false);
-  a.cs.batchPreview='old preview';$('#batch-preview').innerHTML='old preview';$('#save-batch').disabled=false;
-  const key=a.batchPayload().request_key;
-  fields.batch_test.checked=false;a.updateBatchMode();
-  const p=a.batchPayload();assert.equal(p.official,true);assert.equal(p.dimension,null);assert.equal(p.limit,null);assert.equal(p.question_ids.length,0);
-  for(const name of ['dimension','limit','question_ids']){assert.equal(fields[name].disabled,true);assert.equal(fields[name].value,'')}
-  assert.equal(p.mode,'majority_vote');assert.equal(p.calls,3);assert.notEqual(p.request_key,key);
-  assert.equal(a.cs.batchPreview,null);assert.equal($('#batch-preview').innerHTML,'');assert.equal($('#save-batch').disabled,true);
-  assert.match($('#batch-mode-label').textContent,/正式比赛/);
-  fields.batch_test.checked=true;a.updateBatchMode();
-  for(const name of ['dimension','limit','question_ids'])assert.equal(fields[name].disabled,false);
-  assert.equal(a.batchPayload().official,false);
+test('calls selector follows organizer cap and Single-pass refuses multiple calls explicitly',()=>{
+  const {context,fields,$,a}=setup();context.state.settings.competition.max_calls_per_question=5;
+  context.populateCalls($('#batch-form'));assert.equal((fields.calls.innerHTML.match(/<option/g)||[]).length,5);
+  fields.mode.value='single_pass';context.updateCallsControl($('#batch-form'),'#batch-calls-help',true);
+  assert.equal(fields.calls.value,'1');assert.equal(a.batchPayload().calls,1);
+  fields.calls.value='5';context.updateCallsControl($('#batch-form'),'#batch-calls-help');
+  assert.match(fields.calls.validationMessage,/固定 1 次/);assert.throws(()=>a.batchPayload(),/固定 1 次/);
+  for(const mode of ['self_refine','majority_vote']){fields.mode.value=mode;context.updateCallsControl($('#batch-form'),'#batch-calls-help');assert.equal(fields.calls.validationMessage,'');assert.equal(a.batchPayload().calls,5)}
+  const p=a.batchPayload();assert.equal(p.official,true);assert.equal(p.limit,null);assert.equal(p.dimension,null);assert.equal(p.question_ids.length,0);
 });
 
-test('a pending preview cannot re-enable save after the mode changes',async()=>{
-  const {context,fields,$,a}=setup();let resolve;
-  context.api=()=>new Promise(r=>{resolve=r});
-  const pending=$('#batch-form').onsubmit();
-  fields.batch_test.checked=false;a.updateBatchMode();
-  resolve({official:false});await pending;
-  assert.equal(a.cs.batchPreview,null);assert.equal($('#save-batch').disabled,true);assert.equal($('#batch-preview').innerHTML,'');
-  await assert.rejects($('#save-batch').onclick(),/重新预览/);
+test('Mock submissions never appear in official candidates',()=>{
+  const {a,$}=setup();a.cs.submissions=[{id:'mock',provider:'mock',available:true,team_name:'Mock team',team_id:'m',model_id:'mock'},{id:'real',provider:'openai',available:true,team_name:'Real team',team_id:'r',model_id:'real',credential_provided:true}];
+  a.renderTeamSelection();assert.doesNotMatch($('#batch-submissions').innerHTML,/Mock team/);assert.match($('#batch-submissions').innerHTML,/Real team/);
 });
 
-test('an unchanged preview enables freezing and the request remains nonofficial',async()=>{
-  const {context,$,a}=setup();let payload;
-  context.api=async(url,method,p)=>{payload=p;return {official:p.official,teams:1,questions_per_team:4,total_qa:4,max_requests:4,max_external_requests:0,mode:p.mode,calls:1,budget:{timeout_per_question_seconds:60}}};
-  await $('#batch-form').onsubmit();
-  assert.equal(payload.official,false);assert.equal($('#save-batch').disabled,false);
-  assert.equal(a.cs.batchPreview,JSON.stringify(a.batchPayload()));assert.match($('#batch-preview').innerHTML,/批量测试｜非正式成绩/);
+test('canceling confirmation makes only a read-only preview, without creation or launch',async()=>{
+  const {context,$,a}=setup();const requests=[];context.api=async(url)=>{requests.push(url);return plan};answerDialog($,'cancel');
+  await a.startOfficial();assert.deepEqual(requests,['/evaluation-batches/preview']);assert.equal(a.cs.pendingLaunch,null);assert.equal($('#start-official-batch').disabled,false);
+  for(const value of ['1279','7674','全部真实模型','完整','3 次'])assert.ok($('#official-start-summary').innerHTML.includes(value));
 });
 
-test('official confirmation renders frozen values and requires the confirm action',async()=>{
-  const {a,$,context}=setup();const dialog=$('#official-start-dialog');let close;
-  context.table=(headers,rows)=>JSON.stringify(rows);
-  dialog.addEventListener=(event,fn)=>{close=fn};dialog.showModal=()=>{};
-  const batch={name:'冻结正式批次',plan:{teams:2,questions_per_team:1279,max_requests:7674,mode:'self_refine',calls:3}};
-  const canceled=a.confirmOfficialStart(batch);dialog.returnValue='cancel';close();assert.equal(await canceled,false);
-  for(const value of ['冻结正式批次','1279','7674','self_refine','参赛队伍数量'])assert.ok($('#official-start-summary').innerHTML.includes(value));
-  const confirmed=a.confirmOfficialStart(batch);dialog.returnValue='confirm';close();assert.equal(await confirmed,true);
+test('a double click submits only one confirmation and one combined request; lost response retries the same key',async()=>{
+  const {context,$,a,storage}=setup();let resolvePreview;const requests=[];
+  context.api=async(url,method,payload)=>{requests.push({url,payload});if(url.endsWith('/preview'))return new Promise(r=>resolvePreview=r);throw Error('network response lost')};answerDialog($,'confirm');
+  const first=a.startOfficial();await a.startOfficial();resolvePreview(plan);await assert.rejects(first,/network response lost/);
+  assert.equal(requests.length,2);assert.ok(a.cs.pendingLaunch);assert.ok(storage.has('wargame.pendingOfficialLaunch'));assert.equal($('#start-official-batch').disabled,false);
+  const key=requests[1].payload.request_key;
+  await assert.rejects(a.startOfficial(),/network response lost/);assert.equal(requests.length,3);assert.equal(requests[2].payload.request_key,key);
+  assert.equal(requests[2].url,'/evaluation-batches/start-new');
+  const restored=setup(storage);assert.equal(restored.a.cs.pendingLaunch.payload.request_key,key);assert.equal(restored.fields.name.disabled,true);
 });
 
-test('analytics cannot display a delayed response from a previously selected batch',async()=>{
+test('successful combined start automatically opens batch monitoring and clears pending state',async()=>{
+  const {context,$,a,storage}=setup();answerDialog($,'confirm');
+  context.api=async(url)=>{if(url.endsWith('/preview'))return plan;if(url.endsWith('/start-new'))return {batch_id:'formal-batch',started:true};if(url==='/evaluation-batches')return [];return {batch_id:'formal-batch',name:'正式比赛',status:'running',plan:{official:true},elapsed_seconds:0,runs:[],teams:2}};
+  await a.startOfficial();assert.equal(a.cs.batchId,'formal-batch');assert.equal(a.cs.pendingLaunch,null);assert.equal(storage.size,0);assert.equal($('#batch-progress').hidden,false);assert.equal($('#start-official-batch').disabled,false);
+});
+
+test('a monitoring refresh failure cannot turn a successful launch into a new chargeable request',async()=>{
+  const {context,$,a}=setup();answerDialog($,'confirm');const messages=[];context.notice=message=>messages.push(message);
+  const key=a.cs.requestKey;
+  context.api=async(url)=>{if(url.endsWith('/preview'))return plan;if(url.endsWith('/start-new'))return {batch_id:'started-batch',started:true};throw Error('monitor unavailable')};
+  await a.startOfficial();assert.equal(a.cs.batchId,'started-batch');assert.equal(a.cs.requestKey,key);
+  assert.ok(messages.some(message=>message.includes('已启动；监控暂时加载失败')));
+});
+
+test('analytics discards a delayed response from a previously selected batch',async()=>{
   const {context,$,a}=setup();let resolve;
   context.document.querySelectorAll=()=>[{dataset:{analysisTeam:'team-1'}}];
-  $('#analytics-batch').value='old-batch';$('#analytics-top').value='10';
-  context.api=()=>new Promise(r=>{resolve=r});
-  const pending=a.loadAnalytics();
-  $('#analytics-batch').value='new-batch';$('#competition-summary').innerHTML='new-batch results';
-  resolve({official:true});await pending;
-  assert.equal($('#competition-summary').innerHTML,'new-batch results');
-  assert.equal($('#competition-exports').innerHTML,'');
+  $('#analytics-batch').value='old-batch';$('#analytics-top').value='10';context.api=()=>new Promise(r=>resolve=r);
+  const pending=a.loadAnalytics();$('#analytics-batch').value='new-batch';$('#competition-summary').innerHTML='new-batch results';resolve({official:true});await pending;
+  assert.equal($('#competition-summary').innerHTML,'new-batch results');assert.equal($('#competition-exports').innerHTML,'');
 });

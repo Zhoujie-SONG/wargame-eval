@@ -5,16 +5,17 @@ from app.db import db,dumps,question_rows
 from app.settings import settings
 from app.schemas import RunConfig
 from app.services.runs import prepare_run,report,load_run,now,dataset_digest,get_images,runner
-from app.services.images import mock_image
 
 
 def validate_scope(data):
+    if not data.official:
+        raise ValueError('批量测评仅用于正式比赛；Mock 和局部测试请使用开发者选项中的单任务测评')
     if data.official and (data.dimension is not None or data.limit is not None or data.question_ids):
         raise ValueError('正式比赛必须全量评测 1,279 道 QA，不允许维度、题数或题目 ID 筛选')
 
 
 def mode_label(official):
-    return '正式比赛｜全量 1,279 道 QA' if official else '批量测试｜非正式成绩'
+    return '正式比赛｜全量 1,279 道 QA' if official else '历史测试｜非正式成绩'
 
 
 def preview_batch(data):
@@ -28,7 +29,7 @@ def preview_batch(data):
     selected=[submissions[s] for s in data.submission_ids]
     if len({s['team_id'] for s in selected})!=len(selected):raise ValueError('同一批次每支队伍只能选择一个方案版本')
     questions=question_rows();cfg=settings()
-    context={'config':cfg,'questions':questions,'digest':dataset_digest(questions),'images':get_images(),'placeholder':mock_image()}
+    context={'config':cfg,'questions':questions,'digest':dataset_digest(questions),'images':get_images()}
     plans=[]
     for index,s in enumerate(selected,1):
         try:
@@ -47,24 +48,28 @@ def preview_batch(data):
              'dataset_complete':count==sum(cfg['dataset']['expected_counts'].values()),
              'items':[{'team_id':s['team_id'],'team_name':s['name'],'submission_version':s['version'],
                        'model_id':b['model']['model_id'],'prompt_version':b['prompt']['version']} for s,b,_ in plans]}
+    summary['fingerprint']=dataset_digest({'request':data.model_dump(exclude={'request_key'}),'runs':[b for _,b,_ in plans]})
     return plans,summary
 
 
-def create_batch(data):
+def create_batch(data,expected_fingerprint=None):
     validate_scope(data)
     with db() as c:
         old=c.execute('SELECT id,body FROM evaluation_batches WHERE request_key=?',(data.request_key,)).fetchone()
     request=data.model_dump(exclude={'request_key'})
     if old:
         if json.loads(old['body'])['request']!=request:raise ValueError('幂等键已用于不同配置，请重新预览')
+        if expected_fingerprint and json.loads(old['body'])['plan'].get('fingerprint')!=expected_fingerprint:raise ValueError('确认计划与冻结批次不一致')
         return old['id']
     plans,summary=preview_batch(data)
+    if expected_fingerprint and summary['fingerprint']!=expected_fingerprint:raise ValueError('题库、截图、模型、Prompt 或预算已变化，请重新确认')
     identity=uuid4().hex
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
         old=c.execute('SELECT id,body FROM evaluation_batches WHERE request_key=?',(data.request_key,)).fetchone()
         if old:
             if json.loads(old['body'])['request']!=request:raise ValueError('幂等键冲突')
+            if expected_fingerprint and json.loads(old['body'])['plan'].get('fingerprint')!=expected_fingerprint:raise ValueError('确认计划与冻结批次不一致')
             return old['id']
         c.execute('INSERT INTO evaluation_batches(id,request_key,name,created_at,body) VALUES(?,?,?,?,?)',
                   (identity,data.request_key,data.name,now(),dumps({'request':request,'plan':summary})))
@@ -83,6 +88,7 @@ def start_batch(identity,confirm_official=False):
         if row['stopped']:raise ValueError('批次已停止，请创建新批次')
         if row['started']:return {'batch_id':identity,'started':False,'message':'批次已经启动，不重复排队'}
         meta=json.loads(row['body'])
+        if not meta['plan']['official']:raise ValueError('历史测试批次仅供查看；调试请使用开发者选项')
         if meta['plan']['official']:
             from app.schemas import BatchConfig
             validate_scope(BatchConfig(request_key='frozen-batch',**meta['request']))
@@ -90,8 +96,17 @@ def start_batch(identity,confirm_official=False):
         ids=[r[0] for r in c.execute('SELECT run_id FROM batch_entries WHERE batch_id=?',(identity,))]
         c.execute('UPDATE evaluation_batches SET started=1 WHERE id=?',(identity,))
         for rid in ids:c.execute("UPDATE runs SET status='queued' WHERE id=? AND status='draft'",(rid,))
-    for rid in ids:runner.enqueue(rid)
+        # Called on the event loop: one queue packet, no worker can run before commit.
+        # If dispatch fails the transaction rolls back to an unstarted draft.
+        try:runner.enqueue_many(ids)
+        except Exception as exc:raise BatchDispatchError(identity) from exc
     return {'batch_id':identity,'started':True,'tasks':len(ids)}
+
+
+class BatchDispatchError(RuntimeError):
+    def __init__(self,identity):
+        self.batch_id=identity
+        super().__init__('批次已冻结，但未能启动且没有发起模型调用；请使用相同 request_key 重试')
 
 
 def stop_batch(identity):

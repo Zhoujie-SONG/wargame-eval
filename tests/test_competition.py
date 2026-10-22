@@ -78,7 +78,7 @@ def test_official_mock_missing_images_full_gate_and_confirmation(imported,monkey
     assert c.get('/api/evaluation-batches/'+bid).json()['status']=='draft'
     queued=[]
     from app.services import competition
-    monkeypatch.setattr(competition.runner,'enqueue',queued.append)
+    monkeypatch.setattr(competition.runner,'enqueue_many',queued.extend)
     assert c.post('/api/evaluation-batches/'+bid+'/start').status_code==400
     assert c.post('/api/evaluation-batches/'+bid+'/start',json={'confirm_official':False}).status_code==400
     assert not queued
@@ -91,11 +91,43 @@ def test_test_mode_partial_classification(imported):
     c=imported;ids=import_five(c)
     b=run_batch(c,ids[:1],official=False,dimension='L2_main',limit=1,question_ids=[])
     assert b['completed']==1 and not b['official']
-    assert b['mode_label']=='批量测试｜非正式成绩'
+    assert b['mode_label']=='历史测试｜非正式成绩'
     assert b['external_api_calls']==0 and b['runs'][0]['kind']=='mock'
     assert c.get('/api/leaderboard').json()==[]
     d=c.get('/api/evaluation-batches/'+b['batch_id']+'/analytics').json()
     assert not d['official'] and len(d['groups'])==1
+
+
+def seed_legacy_batch(c,payload):
+    """Construct an old-format test record in the isolated DB; never bypass production admission."""
+    from uuid import uuid4
+    from app.schemas import RunConfig
+    from app.services.runs import prepare_run,now
+    bid=uuid4().hex;ids=[];plans=[]
+    with db() as con:
+        submissions=[dict(con.execute('SELECT * FROM submissions WHERE id=?',(sid,)).fetchone()) for sid in payload['submission_ids']]
+    for sub in submissions:
+        fields={k:payload[k] for k in ('mode','calls','early_stop','dimension','limit','question_ids') if k in payload}
+        body,secret=prepare_run(RunConfig(name=sub['name'],model_id=sub['model_id'],prompt_id=sub['prompt_id'],official=False,**fields))
+        rid=uuid4().hex;ids.append(rid);body.update(batch_id=bid,team_id=sub['team_id'],submission_version=sub['version']);plans.append((sub,rid,body,secret))
+    count=len(plans[0][2]['questions']);calls=1 if payload.get('mode','single_pass')=='single_pass' else payload['calls']
+    summary=dict(official=False,teams=len(plans),questions_per_team=count,total_qa=len(plans)*count,max_requests=len(plans)*count*calls,max_external_requests=0,mode=payload.get('mode','single_pass'),calls=calls)
+    with db() as con:
+        con.execute('INSERT INTO evaluation_batches(id,request_key,name,created_at,body) VALUES(?,?,?,?,?)',(bid,payload['request_key'],payload['name'],now(),dumps({'request':payload,'plan':summary})))
+        for sub,rid,body,secret in plans:
+            con.execute('INSERT INTO runs(id,status,created_at,body,secret) VALUES(?,?,?,?,?)',(rid,'draft',now(),dumps(body),secret))
+            con.execute('INSERT INTO batch_entries VALUES(?,?,?,?)',(bid,sub['team_id'],sub['id'],rid))
+    return bid
+
+
+def execute_legacy_fixture(c,bid):
+    """Exercise the unchanged worker with historical fixture runs; public start must reject them."""
+    from app.services.competition import runner
+    with db() as con:
+        ids=[r[0] for r in con.execute('SELECT run_id FROM batch_entries WHERE batch_id=?',(bid,))]
+        con.execute('UPDATE evaluation_batches SET started=1 WHERE id=?',(bid,))
+        for rid in ids:con.execute("UPDATE runs SET status='queued' WHERE id=?",(rid,))
+    c.portal.call(runner.enqueue_many,ids)
 
 
 def wait_batch(c,bid):
@@ -107,8 +139,7 @@ def wait_batch(c,bid):
 
 
 def run_batch(c,ids,**kwargs):
-    r=c.post('/api/evaluation-batches',json=batch_payload(ids,**kwargs));assert r.status_code==200,r.text
-    bid=r.json()['batch_id'];assert c.post('/api/evaluation-batches/'+bid+'/start').status_code==200
+    bid=seed_legacy_batch(c,batch_payload(ids,**kwargs));execute_legacy_fixture(c,bid)
     return wait_batch(c,bid)
 
 
@@ -177,20 +208,18 @@ def test_parser_exception_does_not_echo_cells(client,monkeypatch):
     assert r.status_code==400 and 'sk-private-source-secret' not in r.text
 
 
-@pytest.mark.parametrize('mode,calls',[('single_pass',1),('self_refine',3),('majority_vote',3)])
+@pytest.mark.parametrize('mode,calls',[('single_pass',1),('self_refine',3),('majority_vote',3),('self_refine',5),('majority_vote',5)])
 def test_full_batch_pipeline(imported,mode,calls):
     c=imported;ids=import_five(c)
+    if calls>3:assert c.put('/api/settings',json={'max_calls_per_question':calls,'timeout_per_question_seconds':60}).status_code==200
     payload=batch_payload(ids,mode=mode,calls=calls)
-    preview=c.post('/api/evaluation-batches/preview',json=payload)
-    assert preview.status_code==200 and preview.json()['max_external_requests']==0
-    assert preview.json()['max_requests']==5*4*calls
-    r=c.post('/api/evaluation-batches',json=payload);assert r.status_code==200,r.text
-    bid=r.json()['batch_id']
-    assert c.post('/api/evaluation-batches',json=payload).json()['batch_id']==bid
+    assert c.post('/api/evaluation-batches/preview',json=dict(payload,official=False)).status_code==400
+    assert c.post('/api/evaluation-batches',json=dict(payload,official=False)).status_code==400
+    bid=seed_legacy_batch(c,payload)
     before=c.get('/api/evaluation-batches/'+bid).json()
     assert before['status']=='draft' and before['actual_calls']==0
-    assert c.post('/api/evaluation-batches/'+bid+'/start').json()['started']
-    assert not c.post('/api/evaluation-batches/'+bid+'/start').json()['started']
+    assert c.post('/api/evaluation-batches/'+bid+'/start').status_code==400
+    execute_legacy_fixture(c,bid)
     b=wait_batch(c,bid)
     assert b['status']=='completed' and b['finished']==5 and b['completed']==20
     assert b['actual_calls']==20*calls and b['external_api_calls']==0
@@ -247,13 +276,13 @@ def test_stop_and_persistent_recovery(imported,monkeypatch):
         async def complete(self,*args):
             await asyncio.sleep(.1);return {'output':'A','usage':{}}
     monkeypatch.setattr(runs,'make_client',lambda *a:Slow())
-    bid=c.post('/api/evaluation-batches',json=batch_payload(ids,limit=20,question_ids=[])).json()['batch_id']
-    c.post('/api/evaluation-batches/'+bid+'/start');time.sleep(.02)
+    bid=seed_legacy_batch(c,batch_payload(ids,limit=20,question_ids=[]))
+    execute_legacy_fixture(c,bid);time.sleep(.02)
     assert c.post('/api/evaluation-batches/'+bid+'/stop').status_code==200
     b=wait_batch(c,bid)
     assert b['actual_calls']<=1 and b['status']=='stopped_or_interrupted'
     assert c.get('/api/evaluation-batches/'+bid+'/leaderboard').json()['groups']==[]
-    other=c.post('/api/evaluation-batches',json=batch_payload(ids)).json()['batch_id']
+    other=seed_legacy_batch(c,batch_payload(ids))
     with db() as con:
         rid=con.execute('SELECT run_id FROM batch_entries WHERE batch_id=?',(other,)).fetchone()[0]
         con.execute("UPDATE runs SET status='running' WHERE id=?",(rid,))
@@ -288,7 +317,7 @@ def test_filter_fairness_rerun_and_xss(imported):
 
 def test_blank_chart_and_timing_not_zero(imported):
     c=imported;ids=import_five(c)
-    bid=c.post('/api/evaluation-batches',json=batch_payload(ids)).json()['batch_id']
+    bid=seed_legacy_batch(c,batch_payload(ids))
     html=c.get('/api/evaluation-batches/'+bid+'/export').text
     assert '暂无可排名成绩' in html and '<svg' not in html
     assert len(c.get('/api/evaluation-batches/'+bid+'/leaderboard').json()['excluded'])==5

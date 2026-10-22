@@ -148,18 +148,23 @@ class Runner:
     def enqueue(self, run_id):
         self.queue.put_nowait(run_id)
 
+    def enqueue_many(self, run_ids):
+        self.queue.put_nowait(tuple(run_ids))
+
     async def worker(self):
         while True:
-            run_id = await self.queue.get()
+            packet = await self.queue.get()
             try:
-                await self.execute(run_id)
-            except asyncio.CancelledError:
-                with db() as c:
-                    c.execute("UPDATE runs SET status='interrupted',error='主办方进程停止，需统一重跑' WHERE id=?", (run_id,))
-                raise
-            except Exception as exc:
-                with db() as c:
-                    c.execute("UPDATE runs SET status='infrastructure_error',error=? WHERE id=?", (f'主办方执行故障 ({type(exc).__name__})', run_id))
+                for run_id in packet if isinstance(packet,tuple) else (packet,):
+                    try:
+                        await self.execute(run_id)
+                    except asyncio.CancelledError:
+                        with db() as c:
+                            c.execute("UPDATE runs SET status='interrupted',error='主办方进程停止，需统一重跑' WHERE id=?", (run_id,))
+                        raise
+                    except Exception as exc:
+                        with db() as c:
+                            c.execute("UPDATE runs SET status='infrastructure_error',error=? WHERE id=?", (f'主办方执行故障 ({type(exc).__name__})', run_id))
             finally:
                 self.queue.task_done()
 
