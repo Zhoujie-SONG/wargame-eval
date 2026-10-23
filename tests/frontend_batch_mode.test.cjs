@@ -5,8 +5,10 @@ const vm=require('node:vm');
 const crypto=require('node:crypto');
 
 function setup(storage=new Map()){
-  const nodes=new Map();
-  function $(id){if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,innerHTML:'',textContent:'',querySelectorAll(){return []},scrollIntoView(){},setCustomValidity(v){this.validationMessage=v}});return nodes.get(id)}
+  const nodes=new Map(),listeners=new Map(),rosterStorage=new Map();
+  const html=fs.readFileSync('app/web/index.html','utf8');
+  const ids=new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(x=>x[1]));
+  function $(id){if(/^#[\w-]+$/.test(id)&&!ids.has(id.slice(1)))return null;if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,innerHTML:'',textContent:'',querySelectorAll(){return []},scrollIntoView(){},setCustomValidity(v){this.validationMessage=v}});return nodes.get(id)}
   const fields={};for(const name of ['name','mode','calls','early_stop'])fields[name]=$('field:'+name);
   fields.name.value='正式比赛';fields.mode.value='self_refine';fields.calls.value='3';
   $('#batch-form').elements=fields;$('#batch-form').querySelectorAll=()=>Object.values(fields);
@@ -14,23 +16,38 @@ function setup(storage=new Map()){
     form:()=>Object.fromEntries(Object.entries(fields).filter(([,v])=>!v.disabled).map(([k,v])=>[k,v.value])),
     e:String,table:(h,r)=>JSON.stringify(r),action:fn=>fn,options:()=>{},notice:()=>{},setInterval:()=>{},percent:String,
     sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
-    document:{addEventListener:()=>{},body:{addEventListener:()=>{}},querySelectorAll:()=>[]},api:async()=>{throw Error('Unexpected API call')}};
+    localStorage:{getItem:k=>rosterStorage.get(k)??null,setItem:(k,v)=>rosterStorage.set(k,v),removeItem:k=>rosterStorage.delete(k)},
+    document:{addEventListener:(event,fn)=>listeners.set(event,fn),body:{addEventListener:()=>{}},querySelectorAll:()=>[]},api:async()=>{throw Error('Unexpected API call')}};
   vm.createContext(context);
   const app=fs.readFileSync('app/web/app.js','utf8');
   vm.runInContext(app.slice(app.indexOf('function populateCalls('),app.indexOf('function selectPrompt(')),context);
   const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadAnalytics,cs};})();');
   vm.runInContext(source,context);
-  return {context,fields,$,a:context.testAPI,storage};
+  return {context,fields,$,a:context.testAPI,storage,listeners};
 }
 const plan={fingerprint:'f'.repeat(64),teams:2,questions_per_team:1279,max_requests:7674,max_external_requests:7674,mode:'self_refine',calls:3,real_images_complete:true};
 function answerDialog($,answer){const d=$('#official-start-dialog');let close;d.addEventListener=(event,fn)=>close=fn;d.showModal=()=>{d.returnValue=answer;close()}}
 
 test('group numbering remains independent; formal form has one primary action and no test controls',()=>{
   const html=fs.readFileSync('app/web/index.html','utf8'),nav=html.match(/<nav[\s\S]*?<\/nav>/)[0],form=html.match(/<form id="batch-form"[\s\S]*?<\/form>/)[0];
-  assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['dataset','submissions','batches','analytics','reports','models','prompts','create','monitor']);
-  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04','05','01','02','03','04']);
+  assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['dataset','submissions','batches','analytics','models','prompts','create','monitor']);
+  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04','01','02','03','04']);
+  assert.match(html,/id="historical-report"/);
   assert.doesNotMatch(form,/batch_test|batch-test-mode|name="(?:dimension|limit|question_ids)"|save-batch|readonly/);
   assert.equal((form.match(/<button/g)||[]).length,1);assert.match(form,/开始正式测评/);assert.match(form,/value="self_refine" selected/);
+});
+
+test('V1.3 page initialization reaches dynamic calls setup with its real element IDs',async()=>{
+  const {context,fields,$,listeners}=setup();
+  assert.equal($('#refresh-submissions'),null);
+  context.state.settings.competition.max_calls_per_question=5;
+  fields.calls.value='';
+  context.api=async url=>{assert.ok(['/submissions','/evaluation-batches'].includes(url));return []};
+  await listeners.get('wargame:tab')({detail:'batches'});
+  assert.equal((fields.calls.innerHTML.match(/<option/g)||[]).length,5);
+  assert.equal(fields.calls.value,'5');assert.equal(fields.calls.disabled,false);
+  fields.calls.value='2';fields.calls.onchange();
+  assert.equal(fields.calls.value,'2');assert.equal(fields.calls.validationMessage,'');
 });
 
 test('calls selector follows organizer cap and Single-pass refuses multiple calls explicitly',()=>{
