@@ -327,6 +327,8 @@ def rerun(run_id: str):
     body['started_at'] = body['finished_at'] = None
     with db() as c:
         c.execute('INSERT INTO runs(id,status,created_at,body,secret) VALUES(?,?,?,?,?)', (identity,'queued',now(),dumps(body),row['secret']))
+        from app.services.monitor import ensure as ensure_monitor
+        ensure_monitor(c,identity,body)
         c.execute("UPDATE runs SET status='superseded' WHERE id=?",(run_id,))
         c.execute('UPDATE batch_entries SET run_id=? WHERE run_id=?',(identity,run_id))
     runner.enqueue(identity)
