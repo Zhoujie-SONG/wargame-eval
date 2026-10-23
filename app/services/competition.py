@@ -5,6 +5,7 @@ from app.db import db,dumps,question_rows
 from app.settings import settings
 from app.schemas import RunConfig
 from app.services.runs import prepare_run,report,load_run,now,dataset_digest,get_images,runner
+from app.services.monitor import ensure as ensure_monitor, ensure_batch
 
 
 def validate_scope(data):
@@ -47,7 +48,9 @@ def preview_batch(data):
              'real_images_complete':all(q['image'] and q['image']['real'] for _,b,_ in plans for q in b['questions']),
              'dataset_complete':count==sum(cfg['dataset']['expected_counts'].values()),
              'items':[{'team_id':s['team_id'],'team_name':s['name'],'submission_version':s['version'],
-                       'model_id':b['model']['model_id'],'prompt_version':b['prompt']['version']} for s,b,_ in plans]}
+                       'model_id':b['model']['model_id'],'prompt_version':b['prompt']['version'],
+                       'is_aggregator':bool(b['model'].get('is_aggregator')),
+                       'credential_source':'环境变量' if b['model'].get('api_key_env') else 'API Key'} for s,b,_ in plans]}
     summary['fingerprint']=dataset_digest({'request':data.model_dump(exclude={'request_key'}),'runs':[b for _,b,_ in plans]})
     return plans,summary
 
@@ -76,6 +79,7 @@ def create_batch(data,expected_fingerprint=None):
         for s,body,secret in plans:
             rid=uuid4().hex;body['batch_id']=identity
             c.execute('INSERT INTO runs(id,status,created_at,body,secret) VALUES(?,?,?,?,?)',(rid,'draft',now(),dumps(body),secret))
+            ensure_monitor(c,rid,body)
             c.execute('INSERT INTO batch_entries VALUES(?,?,?,?)',(identity,s['team_id'],s['id'],rid))
     return identity
 
@@ -140,9 +144,58 @@ def get_batch(identity):
 
 
 def list_batches():
-    with db() as c:ids=[r[0] for r in c.execute('SELECT id FROM evaluation_batches ORDER BY created_at DESC')]
-    return [{k:v for k,v in get_batch(i).items() if k!='runs'} for i in ids]
-
+    # One indexed grouping query; monitoring cost is independent of call/result
+    # history volume. Legacy monitor rows are backfilled only once.
+    with db() as c:
+        ensure_batch(c)
+        rows=c.execute("""
+          SELECT b.*, COUNT(e.run_id) AS teams,
+            SUM(CASE WHEN r.status='queued' THEN 1 ELSE 0 END) AS queued,
+            SUM(CASE WHEN r.status='running' THEN 1 ELSE 0 END) AS running,
+            SUM(CASE WHEN r.status='stopping' THEN 1 ELSE 0 END) AS stopping,
+            SUM(CASE WHEN r.status='completed' THEN 1 ELSE 0 END) AS finished,
+            SUM(CASE WHEN r.status IN ('interrupted','infrastructure_error','stopped')
+                     THEN 1 ELSE 0 END) AS failed,
+            COALESCE(SUM(CASE WHEN r.status IN ('queued','running','stopping')
+                              THEN 1 ELSE 0 END),0) AS active,
+            COALESCE(SUM(m.completed),0) AS completed,
+            COALESCE(SUM(m.actual_calls),0) AS actual_calls,
+            COALESCE(SUM(m.error_count),0) AS error_count,
+            COALESCE(SUM(CASE WHEN json_extract(m.meta,'$.model.provider')!='mock'
+                              THEN m.actual_calls ELSE 0 END),0) AS external_api_calls,
+            COALESCE(SUM(
+              json_extract(m.meta,'$.dimension_totals.L2_main')+
+              json_extract(m.meta,'$.dimension_totals.L3_main')+
+              json_extract(m.meta,'$.dimension_totals.L1_sub')+
+              json_extract(m.meta,'$.dimension_totals.L2_sub')),0) AS total,
+            MIN(json_extract(m.meta,'$.started_at')) AS first_start,
+            MAX(json_extract(m.meta,'$.finished_at')) AS last_finish
+          FROM evaluation_batches b
+          LEFT JOIN batch_entries e ON e.batch_id=b.id
+          LEFT JOIN runs r ON r.id=e.run_id
+          LEFT JOIN run_monitor m ON m.run_id=r.id
+          GROUP BY b.id ORDER BY b.created_at DESC
+        """).fetchall()
+    current=now();output=[]
+    for row in rows:
+        meta=json.loads(row['body']);plan=meta['plan'];teams=row['teams']
+        status=('draft' if not row['started'] and not row['stopped'] else
+                'running' if row['active'] else
+                'completed' if row['finished']==teams else 'stopped_or_interrupted')
+        elapsed=(datetime.fromisoformat(
+                 row['last_finish'] if row['last_finish'] and not row['active'] else current)-
+                 datetime.fromisoformat(row['first_start'])).total_seconds() if row['first_start'] else 0
+        total=row['total']
+        output.append(dict(batch_id=row['id'],name=row['name'],created_at=row['created_at'],
+            status=status,started=bool(row['started']),official=plan['official'],
+            mode_label=mode_label(plan['official']),teams=teams,queued=row['queued'] or 0,
+            running=row['running'] or 0,finished=row['finished'] or 0,
+            failed_or_interrupted=row['failed'] or 0,total=total,
+            completed=row['completed'],progress=row['completed']/total if total else 0,
+            elapsed_seconds=elapsed,actual_calls=row['actual_calls'],
+            external_api_calls=row['external_api_calls'],error_count=row['error_count'],
+            plan=plan))
+    return output
 
 def analytics(identity,team_ids=None,top=10,audience='public'):
     batch=get_batch(identity);grouped={};excluded=[]
