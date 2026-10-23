@@ -50,7 +50,7 @@
 <div><h2>Excel / CSV 批量导入选手配置</h2><p>一行一份方案，三段 Prompt 由选手设计，模式由主办方统一选择。请先下载模板。导入不测试连接、不调用模型；预览仅显示凭据是否提供。相同队伍与版本重复导入会跳过，内容变更请使用新版本。</p>
 <div class="row"><a href="/api/submissions/template?format=xlsx">Excel 模板</a><a href="/api/submissions/template?format=csv">CSV 模板</a></div>
 <form id="submission-upload" class="row"><input name="file" type="file" accept=".xlsx,.csv" required aria-label="参赛配置文件"><button>解析并预览</button></form><div id="import-preview"></div><button id="confirm-import" disabled>确认整批导入</button></div></details>
-<div class="panel"><h2>已导入选手 · 参赛名单</h2><p>在这里统一查看与勾选参赛队伍；每队只能选择一个方案版本。默认自动选取每队最新可用版本。比赛设置页不再重复选择。</p><div class="row"><input id="team-filter" placeholder="筛选队伍或模型" aria-label="筛选队伍"><button id="select-teams">全选筛选结果</button><button id="clear-teams" class="secondary">全部取消</button></div><div id="batch-submissions"></div><p class="form-help" id="submission-selection-status"></p><button type="button" id="go-batches">下一步：设置比赛并启动 →</button></div></section>
+<div class="panel"><h2>已导入选手 · 参赛名单</h2><p>在这里统一查看与勾选参赛队伍；每队只能选择一个方案版本。默认自动选取每队最新可用版本。比赛设置页不再重复选择。</p><div class="row"><input id="team-filter" placeholder="筛选队伍或模型" aria-label="筛选队伍"><button id="select-teams">全选筛选结果</button><button id="clear-teams" class="secondary">全部取消</button><button id="reset-roster-latest" class="secondary">恢复为每队最新版本</button></div><div id="batch-submissions"></div><p class="form-help" id="submission-selection-status"></p><button type="button" id="go-batches">下一步：设置比赛并启动 →</button></div></section>
 <section id="batches" class="page" hidden>
 
 <div class="panel"><h2>比赛参数 · 一键开始</h2><p>全量 1,279 道 QA（固定） · 全部四维 · 仅真实模型与真实截图。开发调试请使用“开发者选项”。</p>
