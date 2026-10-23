@@ -167,13 +167,18 @@ def list_submissions():
     with db() as c:
         rows=c.execute('SELECT s.*,m.body AS model,p.body AS prompt,m.secret FROM submissions s LEFT JOIN models m ON m.id=s.model_id '
                        'LEFT JOIN prompts p ON p.id=s.prompt_id ORDER BY s.team_id,s.created_at DESC').fetchall()
-    output=[]
+    output=[];seen=set();latest={}
     for r in rows:
         model=json.loads(r['model']) if r['model'] else {};prompt=json.loads(r['prompt']) if r['prompt'] else {}
+        is_latest=r['team_id'] not in seen
+        seen.add(r['team_id'])
+        if is_latest:latest[r['team_id']]=r['version']
         output.append({'id':r['id'],'team_id':r['team_id'],'team_name':r['name'],'submission_version':r['version'],
                        'model_id':model.get('model_id'),'provider':model.get('provider'),'api_base_url':model.get('base_url'),
                        'is_aggregator':model.get('is_aggregator'),'credential_provided':bool(r['secret'] or model.get('api_key_env')),
-                       'prompt_version':prompt.get('version'),'available':bool(model and prompt)})
+                       'prompt_version':prompt.get('version'),'available':bool(model and prompt),
+                       'is_latest':is_latest,'latest_version':latest.get(r['team_id']),
+                       'credential_source':'环境变量' if model.get('api_key_env') else ('API Key' if r['secret'] else '未提供')})
     return output
 
 
