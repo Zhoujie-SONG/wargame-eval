@@ -13,6 +13,7 @@ def db():
     con = sqlite3.connect(HOME / 'wargame.sqlite', timeout=30)
     con.row_factory = sqlite3.Row
     con.execute('PRAGMA foreign_keys=ON')
+    con.execute('PRAGMA recursive_triggers=ON')
     try:
         yield con
         con.commit()
@@ -66,6 +67,8 @@ def init_db():
           run_id TEXT, question_id TEXT, ordinal INTEGER, body TEXT NOT NULL,
           PRIMARY KEY(run_id,question_id,ordinal));
         ''')
+        from app.services.monitor import install
+        install(c)
         # Never replay an ambiguous, potentially charged request after a crash.
         c.execute("UPDATE runs SET status='interrupted', error='主办方进程中断；可统一重跑，不自动重复收费请求' WHERE status IN ('running','queued','stopping')")
 
