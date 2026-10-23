@@ -3,11 +3,11 @@ import json
 from typing import Literal
 from fastapi import APIRouter, UploadFile, File, Query
 from fastapi.responses import Response, JSONResponse
-from app.schemas import BatchConfig, BatchStart, BatchLaunch, ImportConfirm
+from app.schemas import BatchConfig, BatchStart, BatchLaunch, ImportConfirm, OfficialRoster
 from app.services import submissions as subs
 from app.services import competition as comp
 from app.services.competition_report import chart_svg,render_html,DIMENSIONS,CHARTS
-from app.db import dumps
+from app.db import dumps, db
 
 router=APIRouter(prefix='/api')
 
@@ -32,6 +32,37 @@ def import_submissions(value:ImportConfirm):return subs.confirm_import(value.pre
 
 @router.get('/submissions')
 def submissions():return subs.list_submissions()
+
+
+@router.get('/submissions/official-roster')
+def official_roster():
+    with db() as c:
+        row=c.execute("SELECT body FROM organizer_state WHERE key='official_roster'").fetchone()
+        if row:return {'configured':True,'submission_ids':json.loads(row['body'])}
+        ids=[];seen=set()
+        for r in c.execute("""SELECT s.id,s.team_id,m.body AS model FROM submissions s
+            JOIN models m ON m.id=s.model_id ORDER BY s.team_id,s.created_at DESC,s.rowid DESC"""):
+            if r['team_id'] not in seen and json.loads(r['model'])['provider']!='mock':
+                ids.append(r['id']);seen.add(r['team_id'])
+        return {'configured':False,'submission_ids':ids}
+
+
+@router.put('/submissions/official-roster')
+def save_official_roster(value:OfficialRoster):
+    ids=value.submission_ids
+    if len(ids)!=len(set(ids)):raise ValueError('不能重复选择相同方案')
+    with db() as c:
+        selected=[]
+        for sid in ids:
+            row=c.execute("""SELECT s.team_id,m.body AS model FROM submissions s
+                JOIN models m ON m.id=s.model_id WHERE s.id=?""",(sid,)).fetchone()
+            if not row or json.loads(row['model'])['provider']=='mock':
+                raise ValueError('正式名单只能选择已导入的真实模型')
+            selected.append(row['team_id'])
+        if len(set(selected))!=len(selected):raise ValueError('同一队伍只能选择一个方案版本')
+        c.execute("""INSERT INTO organizer_state(key,body) VALUES('official_roster',?)
+            ON CONFLICT(key) DO UPDATE SET body=excluded.body""",(dumps(ids),))
+    return {'submission_ids':ids,'configured':True}
 
 
 @router.post('/evaluation-batches/preview')
