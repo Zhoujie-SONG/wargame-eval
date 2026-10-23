@@ -4,6 +4,7 @@ import io
 import json
 import math
 import zipfile
+import re
 from datetime import datetime, timezone
 from uuid import uuid4
 from openpyxl import Workbook, load_workbook
@@ -15,6 +16,18 @@ from app.schemas import ModelConfig, PromptConfig
 from app.services.runs import now
 import hashlib
 import hmac
+
+_EXCEL_CR_ESCAPE = re.compile(r'_x005F_x005F_|_x005F_x000D_|_x000D_')
+
+def _excel_encode_text(value):
+    return (value.replace('_x005F_', '_x005F_x005F_')
+                 .replace('_x000D_', '_x005F_x000D_')
+                 .replace('\r', '_x000D_'))
+
+def _excel_decode_text(value):
+    if not isinstance(value,str):return value
+    mapping={'_x005F_x005F_':'_x005F_','_x005F_x000D_':'_x000D_','_x000D_':'\r'}
+    return _EXCEL_CR_ESCAPE.sub(lambda found:mapping[found.group()],value)
 
 FIELDS=['team_id','team_name','submission_version','api_base_url','api_key','api_key_env','model_id',
         'is_aggregator','prompt_system','prompt_initial','prompt_review','temperature','max_tokens','provider']
@@ -54,11 +67,12 @@ def read_rows(content, filename):
                 if sum(i.file_size for i in z.infolist())>40_000_000:raise ImportFormatError('Excel 解压大小超过限制')
             book=load_workbook(io.BytesIO(content),read_only=True,data_only=False,keep_links=False)
             sheet=book['submissions'] if 'submissions' in book.sheetnames else book.worksheets[0]
+            encoded_lines=book.properties.keywords == 'wargame-crlf-preserved-v1'
             iterator=sheet.iter_rows(); header=[cell.value for cell in next(iterator)]
             for number,cells in enumerate(iterator,2):
                 if any(c.value is not None for c in cells):
                     if any(c.data_type=='f' for c in cells):raise ImportFormatError(f'第 {number} 行包含 Excel 公式，请改为纯文本')
-                    rows.append((number,[c.value for c in cells]))
+                    rows.append((number,[_excel_decode_text(c.value) if encoded_lines else c.value for c in cells]))
                 if len(rows)>100:raise ImportFormatError('每次最多 100 份参赛方案')
             book.close()
         except ImportFormatError:raise
@@ -207,9 +221,9 @@ def template_rows(mock=False):
 
 
 def spreadsheet_bytes(headers,rows,sheet_name='submissions'):
-    book=Workbook();sheet=book.active;sheet.title=sheet_name;sheet.append(headers)
+    book=Workbook();book.properties.keywords='wargame-crlf-preserved-v1';sheet=book.active;sheet.title=sheet_name;sheet.append(headers)
     for row in rows:
-        sheet.append(row)
+        sheet.append([_excel_encode_text(v) if isinstance(v,str) else v for v in row])
         for cell in sheet[sheet.max_row]:
             if isinstance(cell.value,str):cell.data_type='s'
             cell.alignment=Alignment(vertical='top',wrap_text=True)
