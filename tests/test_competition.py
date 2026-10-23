@@ -304,6 +304,10 @@ def test_filter_fairness_rerun_and_xss(imported):
         rid=b['runs'][0]['run_id'];r=con.execute('SELECT body FROM runs WHERE id=?',(rid,)).fetchone()
         body=json.loads(r[0]);body['mode']='majority_vote'
         con.execute('UPDATE runs SET body=? WHERE id=?',(dumps(body),rid))
+        # This synthetic snapshot edit must also update the cached immutable metadata.
+        # Normal runs freeze their mode before the monitoring row is created.
+        con.execute("UPDATE run_monitor SET meta=json_set(meta,'$.mode',?) WHERE run_id=?",
+                    (body['mode'],rid))
     assert len(c.get('/api/evaluation-batches/'+bid+'/analytics').json()['groups'])==2
     qid=c.get('/api/runs/'+rid).json()['results'][0]['question_id']
     c.post('/api/runs/'+rid+'/infrastructure',json={'question_ids':[qid],'reason':'主办方资源测试故障'})
