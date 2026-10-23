@@ -10,6 +10,10 @@ def score(questions, results):
         if r:
             d['completed'] += 1
             d['correct'] += int(r.get('correct', False))
+    return score_counts(dimensions)
+
+
+def score_counts(dimensions):
     for d in dimensions.values():
         d['accuracy'] = d['correct']/d['total'] if d['total'] else None
     # Missing dimensions contribute zero; never renormalize partial tests.
