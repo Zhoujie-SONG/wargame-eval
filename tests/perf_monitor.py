@@ -5,6 +5,8 @@ No private dataset, network access or real model calls are needed.
 """
 import json
 import os
+import sys
+sys.path.insert(0,str(__import__('pathlib').Path(__file__).resolve().parent.parent))
 import statistics
 import tempfile
 import time
