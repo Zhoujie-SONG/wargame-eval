@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>兵棋多模态测评 · V1.2</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>兵棋多模态测评 · V1.3</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script></head>
 <body>
-<aside><div class="brand">兵棋多模态测评<small>竞赛执行平台 · V1.2</small></div><nav aria-label="管理导航">
+<aside><div class="brand">兵棋多模态测评<small>竞赛执行平台 · V1.3</small></div><nav aria-label="管理导航">
 <div class="nav-group" aria-labelledby="competition-nav"><h2 id="competition-nav">正式比赛</h2>
 <button data-tab="dataset" class="active">01　数据集管理</button>
 <button data-tab="submissions">02　参赛选手与配置</button>
@@ -60,6 +60,6 @@
 <div class="panel"><h2>选择竞赛批次</h2><div class="row"><select id="analytics-batch" aria-label="分析批次"></select><select id="analytics-top" aria-label="图表 Top N"><option value="5">Top 5</option><option value="10" selected>Top 10</option><option value="0">全部队伍</option></select><select id="analytics-audience" aria-label="报告版本"><option value="public">公开版</option><option value="admin">管理员统计详细版</option></select><button id="refresh-analytics">刷新分析</button></div><p>同批次也会按 Mock / 正式类型、数据与截图、模式、预算、提前结束设置分别排名。未完成或主办方故障的任务不进入最终排名。不进行多批次比较或其他模式成绩推断。</p><div id="analytics-teams"></div><div id="competition-exports" class="row"></div></div><div id="competition-summary"></div><div id="competition-groups"></div><details class="panel" id="historical-report"><summary>历史报告与单次测评排行榜</summary><div class="panel"><h2>排行榜与成绩比较</h2><div class="row"><select id="board-kind" aria-label="成绩类型"><option value="official">正式全量比赛</option><option value="mock">Mock 联调（非正式）</option><option value="partial_test">真实模型测试（非正式）</option></select><button id="refresh-board">刷新</button></div><p>综合分 = 100 × (0.35 L2主 + 0.35 L3主 + 0.15 L1子 + 0.15 L2子)。局部缺失维度记零，不重新归一化。正式榜按相同规则组分别排名。</p><div id="leaderboard"></div></div></details>
 </section>
 <section id="run-detail" class="panel" hidden></section>
-<footer>V1.2 · 本地单管理员原型。聚合代理内部调用不可观测，平台预算只限制可见的请求。正式比赛前请准备真实截图与有效模型凭据。</footer>
+<footer>V1.3 · 本地单管理员原型。聚合代理内部调用不可观测，平台预算只限制可见的请求。正式比赛前请准备真实截图与有效模型凭据。</footer>
 </main><dialog id="official-start-dialog" aria-labelledby="official-start-title"><h2 id="official-start-title">确认启动正式比赛</h2><div id="official-start-summary"></div><p class="warn">确认后将自动创建并启动所有参赛队伍的正式测评任务，真实模型 API 调用可能产生费用。</p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认并开始测评</button></form></dialog>
 </body></html>
