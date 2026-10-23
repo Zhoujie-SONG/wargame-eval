@@ -5,7 +5,7 @@ const vm=require('node:vm');
 const crypto=require('node:crypto');
 
 function setup(storage=new Map()){
-  const nodes=new Map(),listeners=new Map(),rosterStorage=new Map();
+  const nodes=new Map(),listeners=new Map(),rosterStorage=new Map(),timers=[];
   const html=fs.readFileSync('app/web/index.html','utf8');
   const ids=new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(x=>x[1]));
   function $(id){if(/^#[\w-]+$/.test(id)&&!ids.has(id.slice(1)))return null;if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,innerHTML:'',textContent:'',querySelectorAll(){return []},scrollIntoView(){},setCustomValidity(v){this.validationMessage=v}});return nodes.get(id)}
@@ -14,7 +14,7 @@ function setup(storage=new Map()){
   $('#batch-form').elements=fields;$('#batch-form').querySelectorAll=()=>Object.values(fields);
   const context={$,crypto,URLSearchParams,Set,Image:class{},labels:{},state:{settings:{competition:{max_calls_per_question:3}}},
     form:()=>Object.fromEntries(Object.entries(fields).filter(([,v])=>!v.disabled).map(([k,v])=>[k,v.value])),
-    e:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'),table:(h,r)=>JSON.stringify(r),action:fn=>fn,options:()=>{},notice:()=>{},setInterval:()=>{},percent:String,
+    e:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'),table:(h,r)=>JSON.stringify(r),action:fn=>fn,options:()=>{},notice:()=>{},setInterval:(fn,ms)=>timers.push({fn,ms}),percent:String,
     sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     localStorage:{getItem:k=>rosterStorage.get(k)??null,setItem:(k,v)=>rosterStorage.set(k,v),removeItem:k=>rosterStorage.delete(k)},
     document:{addEventListener:(event,fn)=>listeners.set(event,fn),body:{addEventListener:()=>{}},querySelectorAll:()=>[]},api:async()=>{throw Error('Unexpected API call')}};
@@ -23,7 +23,7 @@ function setup(storage=new Map()){
   vm.runInContext(app.slice(app.indexOf('function populateCalls('),app.indexOf('function selectPrompt(')),context);
   const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadSubmissions,restoreLatestRoster,loadAnalytics,cs};})();');
   vm.runInContext(source,context);
-  return {context,fields,$,a:context.testAPI,storage,listeners};
+  return {context,fields,$,a:context.testAPI,storage,listeners,timers};
 }
 const plan={fingerprint:'f'.repeat(64),teams:2,questions_per_team:1279,max_requests:7674,max_external_requests:7674,mode:'self_refine',calls:3,real_images_complete:true};
 function answerDialog($,answer){const d=$('#official-start-dialog');let close;d.addEventListener=(event,fn)=>close=fn;d.showModal=()=>{d.returnValue=answer;close()}}
@@ -135,4 +135,26 @@ test('roster is persisted by server and restore-latest explicitly replaces stale
  await a.loadSubmissions();assert.ok(a.cs.selected.has('old'));assert.ok(!a.cs.selected.has('new'));
  await a.restoreLatestRoster();assert.ok(a.cs.selected.has('new'));assert.ok(!a.cs.selected.has('old'));
  assert.equal(selected.length,1);assert.deepEqual([...selected[0]],['new']);
+});
+
+
+test('polling checks selected batch every 3 seconds and historical batch list every 15 seconds',async()=>{
+  const {context,a,timers}=setup();
+  context.state.tab='batches';a.cs.batchId='active-batch';
+  const requests=[];
+  context.api=async(url)=>{
+    requests.push(url);
+    if(url==='/evaluation-batches')return [];
+    if(url==='/evaluation-batches/active-batch/progress')return {
+      batch_id:'active-batch',name:'active',status:'running',plan:{official:true},
+      teams:1,queued:0,running:1,finished:0,failed_or_interrupted:0,
+      actual_calls:1,elapsed_seconds:3,completed:1,total:1279,error_count:0,runs:[]
+    };
+    throw Error('unexpected '+url);
+  };
+  assert.deepEqual(timers.map(t=>t.ms),[3000,15000]);
+  await timers[0].fn();
+  assert.deepEqual(requests,['/evaluation-batches/active-batch/progress']);
+  await timers[1].fn();
+  assert.deepEqual(requests,['/evaluation-batches/active-batch/progress','/evaluation-batches']);
 });
