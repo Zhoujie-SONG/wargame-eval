@@ -21,3 +21,41 @@ aside nav{max-height:none}@media(max-width:700px){aside nav{display:block;flex:a
 #official-start-summary h3 {margin:16px 0 8px}
 #official-start-dialog {max-width:960px;max-height:85vh;overflow-y:auto}
 #official-start-summary {overflow-x:auto}
+
+/* V1.4 flow: step bar, status line, equal panes, Chinese status badges */
+header>div:first-child{flex:1;min-width:0;margin-right:20px}
+.stepper{list-style:none;display:flex;gap:10px;margin:8px 0 0;padding:0}
+.stepper li{flex:1;min-width:0}
+.step{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;color:#4a5b70;border:1px solid #dfe6ee;border-radius:8px;padding:10px 14px;white-space:normal}
+.step:hover{filter:none;border-color:#9db4cc}
+.step.current{border-color:#235d91;box-shadow:inset 0 -3px 0 #235d91;color:#183e68;font-weight:650}
+.step .label small{display:block;font-size:11px;font-weight:400;color:#7f90a5;line-height:1.2}
+.dot{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;font-size:13px;font-weight:700;background:#eef2f6;color:#74849a}
+.state-done>.dot,.state-done .dot{background:#e4f2ed;color:#21785f}
+.state-warning>.dot,.state-warning .dot{background:#fff3ce;color:#9a6400}
+.state-blocked>.dot,.state-blocked .dot{background:#fff0ef;color:#aa3930}
+.state-running>.dot,.state-running .dot{background:#e3f1fa;color:#1d6fa5;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.state-running .dot{animation:none}}
+.status-line{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid #dfe6ee;border-left:4px solid #9db4cc;border-radius:8px;padding:12px 16px;margin-bottom:18px}
+.status-line.state-done{border-left-color:#21785f}.status-line.state-warning{border-left-color:#d49a1a}
+.status-line.state-blocked{border-left-color:#c8473d}.status-line.state-running{border-left-color:#1d6fa5}
+.status-line .body{min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:12px;padding:2px 9px;border-radius:12px;background:#eef2f6;color:#4a5b70}
+.chip-ok{background:#e4f2ed;color:#21785f}.chip-warn{background:#fff3ce;color:#835900}.chip-bad{background:#fff0ef;color:#aa3930}
+.status{display:inline-block;font-size:12px;padding:1px 9px;border-radius:12px;white-space:nowrap}
+.status-green{background:#e4f2ed;color:#21785f}.status-yellow{background:#fff3ce;color:#835900}
+.status-red{background:#fff0ef;color:#aa3930}.status-gray{background:#eef2f6;color:#5d6e82}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch}
+.split>.pane{margin-bottom:0;display:flex;flex-direction:column;min-width:0}
+.stack{display:grid;gap:4px}
+.stack .row{margin-top:14px}
+dl.kv{margin:0}dl.kv>div{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid #e9edf2}
+dl.kv>div:last-child{border-bottom:none}dl.kv dt{color:#74849a}dl.kv dd{margin:0;font-weight:600;color:#183e68;text-align:right}
+.overall{display:flex;align-items:center;gap:14px;margin:6px 0 4px}.overall progress{flex:1;height:14px}.overall span{white-space:nowrap;color:#4a5b70}
+.gate-reason{color:#ad5c1f;font-size:12px}
+.empty-hint{color:#7f90a5;padding:18px 0}
+.table-scroll{overflow-x:auto}
+@media(max-width:1000px){.split{grid-template-columns:1fr}.overall{flex-wrap:wrap}.overall span{white-space:normal}}
+@media(max-width:720px){.step .label{font-size:0}.step .label small{font-size:11px}.stepper{gap:6px}.step{justify-content:center;padding:10px 6px}}

@@ -122,12 +122,29 @@ def stop_batch(identity):
     return {'batch_id':identity,'status':'stop_requested'}
 
 
+ERROR_KINDS=('api_error','timeout','invalid_output','infrastructure_error')
+
+
+def attach_error_breakdown(runs):
+    """Add per-run error counts by kind with one grouped query (no result bodies are loaded)."""
+    for r in runs:r['error_breakdown']={k:0 for k in ERROR_KINDS}
+    if not runs:return
+    marks=','.join('?'*len(runs))
+    with db() as c:
+        rows=c.execute(f"SELECT run_id,json_extract(body,'$.status') AS s,COUNT(*) AS n FROM results "
+                       f"WHERE run_id IN ({marks}) GROUP BY run_id,s",[r['run_id'] for r in runs]).fetchall()
+    by_run={r['run_id']:r for r in runs}
+    for row in rows:
+        if row['s'] in ERROR_KINDS:by_run[row['run_id']]['error_breakdown'][row['s']]=row['n']
+
+
 def get_batch(identity):
     with db() as c:
         row=c.execute('SELECT * FROM evaluation_batches WHERE id=?',(identity,)).fetchone()
         ids=[r[0] for r in c.execute('SELECT run_id FROM batch_entries WHERE batch_id=? ORDER BY team_id',(identity,))]
     if not row:raise ValueError('批次不存在')
     meta=json.loads(row['body']);runs=[report(rid,False) for rid in ids]
+    attach_error_breakdown(runs)
     statuses=[r['status'] for r in runs]
     active=sum(s in ('queued','running','stopping') for s in statuses)
     status='draft' if not row['started'] and not row['stopped'] else 'running' if active else 'completed' if all(s=='completed' for s in statuses) else 'stopped_or_interrupted'

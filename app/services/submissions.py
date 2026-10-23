@@ -181,17 +181,33 @@ def confirm_import(identity):
             c.execute('INSERT INTO submissions VALUES(?,?,?,?,?,?,?,?)',(sid,r['team_id'],r['version'],r['name'],mid,pid,r['fingerprint'],now()))
             created.append(sid)
             if model['provider']!='mock':
-                for old in c.execute('SELECT id FROM submissions WHERE team_id=?',(r['team_id'],)):
+                previous=None
+                for old in c.execute('SELECT id,version FROM submissions WHERE team_id=?',(r['team_id'],)).fetchall():
+                    if old['id'] in roster and old['id']!=sid:previous=old['version']
                     roster.discard(old['id'])
                 roster.add(sid)
+                # previous_version is None when the team was not on the roster before this import.
                 selection_updates.append({'team_id':r['team_id'],'team_name':r['name'],
-                                          'submission_version':r['version'],'submission_id':sid})
+                                          'submission_version':r['version'],'submission_id':sid,
+                                          'previous_version':previous})
         if selection_updates:
             c.execute("INSERT INTO organizer_state(key,body) VALUES('official_roster',?) ON CONFLICT(key) DO UPDATE SET body=excluded.body",(dumps(sorted(roster)),))
         result={'imported':len(created),'duplicates':duplicates,'submission_ids':created,
                 'api_requests':0,'selection_updates':selection_updates}
         c.execute('UPDATE import_previews SET secret=NULL,result=? WHERE id=?',(dumps(result),identity))
     return result
+
+
+def roster_ids(c):
+    """Return (configured, submission_ids): saved organizer roster, else newest real version per team."""
+    row=c.execute("SELECT body FROM organizer_state WHERE key='official_roster'").fetchone()
+    if row:return True,json.loads(row['body'])
+    ids=[];seen=set()
+    for r in c.execute("""SELECT s.id,s.team_id,m.body AS model FROM submissions s
+        JOIN models m ON m.id=s.model_id ORDER BY s.team_id,s.created_at DESC,s.rowid DESC"""):
+        if r['team_id'] not in seen and json.loads(r['model'])['provider']!='mock':
+            ids.append(r['id']);seen.add(r['team_id'])
+    return False,ids
 
 
 def list_submissions():

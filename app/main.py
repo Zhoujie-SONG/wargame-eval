@@ -123,14 +123,8 @@ def import_bundled():
 
 @app.get('/api/dataset/stats')
 def dataset_stats():
-    questions = question_rows()
-    images = get_images()
-    counts = {k: sum(q['level']+'_'+q['role']==k for q in questions) for k in settings()['dataset']['expected_counts']}
-    ready = sum(bool((v := images.get((q['replay_id'], q['image_step']))) and v['real'] and (HOME/'images'/v['id']).is_file()) for q in questions)
-    frames = {(q['replay_id'],q['image_step']) for q in questions}
-    return {'total': len(questions), 'counts': counts, 'expected': settings()['dataset']['expected_counts'],
-            'real_image_questions': ready, 'missing_image_questions': len(questions)-ready,
-            'unique_frames': len(frames), 'mapped_frames': len(set(images)&frames)}
+    from app.services.dataset import overview
+    return overview()
 
 
 @app.get('/api/questions')

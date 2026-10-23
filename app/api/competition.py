@@ -34,17 +34,17 @@ def import_submissions(value:ImportConfirm):return subs.confirm_import(value.pre
 def submissions():return subs.list_submissions()
 
 
+@router.get('/competition/status')
+def competition_status():
+    from app.services.competition_status import compute
+    return compute()
+
+
 @router.get('/submissions/official-roster')
 def official_roster():
     with db() as c:
-        row=c.execute("SELECT body FROM organizer_state WHERE key='official_roster'").fetchone()
-        if row:return {'configured':True,'submission_ids':json.loads(row['body'])}
-        ids=[];seen=set()
-        for r in c.execute("""SELECT s.id,s.team_id,m.body AS model FROM submissions s
-            JOIN models m ON m.id=s.model_id ORDER BY s.team_id,s.created_at DESC,s.rowid DESC"""):
-            if r['team_id'] not in seen and json.loads(r['model'])['provider']!='mock':
-                ids.append(r['id']);seen.add(r['team_id'])
-        return {'configured':False,'submission_ids':ids}
+        configured,ids=subs.roster_ids(c)
+    return {'configured':configured,'submission_ids':ids}
 
 
 @router.put('/submissions/official-roster')

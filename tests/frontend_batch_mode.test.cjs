@@ -21,7 +21,7 @@ function setup(storage=new Map()){
   vm.createContext(context);
   const app=fs.readFileSync('app/web/app.js','utf8');
   vm.runInContext(app.slice(app.indexOf('function populateCalls('),app.indexOf('function selectPrompt(')),context);
-  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadSubmissions,restoreLatestRoster,loadAnalytics,cs};})();');
+  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadSubmissions,restoreLatestRoster,loadAnalytics,cs,showBatch,renderLaunchSummary,selectionNotice,fmtDuration};})();');
   vm.runInContext(source,context);
   return {context,fields,$,a:context.testAPI,storage,listeners,timers};
 }
@@ -30,8 +30,12 @@ function answerDialog($,answer){const d=$('#official-start-dialog');let close;d.
 
 test('group numbering remains independent; formal form has one primary action and no test controls',()=>{
   const html=fs.readFileSync('app/web/index.html','utf8'),nav=html.match(/<nav[\s\S]*?<\/nav>/)[0],form=html.match(/<form id="batch-form"[\s\S]*?<\/form>/)[0];
-  assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['dataset','submissions','batches','analytics','models','prompts','create','monitor']);
-  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04','01','02','03','04']);
+  assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['models','prompts','create','monitor']);
+  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04']);
+  assert.match(nav,/id="flow-home"/);
+  for(const key of ['dataset','submissions','batches','analytics'])assert.match(html,new RegExp('<section id="'+key+'" class="page"'));
+  assert.match(html,/id="flow-stepper"/);assert.match(html,/id="flow-status"/);assert.match(html,/src="\/static\/flow\.js"/);
+  assert.doesNotMatch(html,/下一步/);assert.doesNotMatch(html,/id="go-(?:batches|submissions)"/);
   assert.match(html,/id="historical-report"/);
   assert.doesNotMatch(form,/batch_test|batch-test-mode|name="(?:dimension|limit|question_ids)"|save-batch|readonly/);
   assert.equal((form.match(/<button/g)||[]).length,1);assert.match(form,/开始正式测评/);assert.match(form,/value="self_refine" selected/);
@@ -140,7 +144,7 @@ test('roster is persisted by server and restore-latest explicitly replaces stale
 
 test('polling checks selected batch every 3 seconds and historical batch list every 15 seconds',async()=>{
   const {context,a,timers}=setup();
-  context.state.tab='batches';a.cs.batchId='active-batch';
+  context.state.tab='analytics';a.cs.batchId='active-batch';a.cs.batchRunning=true;
   const requests=[];
   context.api=async(url)=>{
     requests.push(url);
@@ -157,4 +161,95 @@ test('polling checks selected batch every 3 seconds and historical batch list ev
   assert.deepEqual(requests,['/evaluation-batches/active-batch/progress']);
   await timers[1].fn();
   assert.deepEqual(requests,['/evaluation-batches/active-batch/progress','/evaluation-batches']);
+});
+
+
+test('status labels are Chinese and unknown values fall back to the raw text',()=>{
+  const {context}=setup();
+  const label=v=>context.statusLabel(v);
+  assert.deepEqual({...label('running')},{text:'运行中',cls:'green'});
+  assert.deepEqual({...label('infrastructure_error')},{text:'平台故障',cls:'red'});
+  assert.deepEqual({...label('interrupted')},{text:'已中断',cls:'red'});
+  assert.deepEqual({...label('queued')},{text:'等待中',cls:'yellow'});
+  assert.deepEqual({...label('weird')},{text:'weird',cls:'gray'});
+});
+
+test('roster shows one row per team with a version list; mock and unavailable entries are hidden',()=>{
+  const {a,$}=setup();
+  a.cs.selected=new Set(['a1']);
+  a.cs.submissions=[
+    {id:'a2',team_id:'A',team_name:'<b>Alpha</b>',submission_version:'v2',is_latest:true,latest_version:'v2',provider:'openai',available:true,model_id:'M',credential_provided:true,credential_source:'API Key'},
+    {id:'a1',team_id:'A',team_name:'<b>Alpha</b>',submission_version:'v1',is_latest:false,latest_version:'v2',provider:'openai',available:true,model_id:'M',credential_provided:true,credential_source:'API Key'},
+    {id:'b1',team_id:'B',team_name:'Beta',submission_version:'v1',is_latest:true,latest_version:'v1',provider:'openai',available:true,model_id:'N',credential_provided:false,credential_source:'未提供'},
+    {id:'m1',team_id:'M',team_name:'MockTeam',submission_version:'v1',is_latest:true,provider:'mock',available:true,model_id:'mock'},
+    {id:'x1',team_id:'X',team_name:'Broken',submission_version:'v1',is_latest:true,provider:'openai',available:false,model_id:'Z'}];
+  a.renderTeamSelection();
+  const rows=JSON.parse($('#batch-submissions').innerHTML);
+  assert.equal(rows.length,2);                                   // Alpha (2 versions → 1 row) and Beta
+  const [alpha,beta]=rows;
+  assert.match(alpha[1],/data-team-version="A"/);assert.match(alpha[1],/<option value="a1" selected>v1<\/option>/);
+  assert.match(alpha[1],/<option value="a2">v2（最新）<\/option>/);assert.match(alpha[1],/<option value="">不参赛<\/option>/);
+  assert.match(alpha[5],/非最新版本/);assert.match(alpha[5],/有更新版本 v2/);
+  assert.match(beta[1],/data-team-version="B"/);assert.match(beta[5],/未参赛/);assert.match(beta[4],/未提供/);
+  const html=$('#batch-submissions').innerHTML;
+  assert.ok(!html.includes('MockTeam')&&!html.includes('Broken')&&!html.includes('<b>'));   // escaped / filtered
+  assert.equal($('#submission-selection-status').textContent,'已选择 1 支队伍（共导入 2 支）');
+});
+
+test('choosing a version saves the roster, replaces the same team and "不参赛" removes it; failures roll back',async()=>{
+  const {context,a,listeners}=setup();const saved=[];
+  a.cs.submissions=[{id:'a1',team_id:'A',provider:'openai',available:true,submission_version:'v1',team_name:'A'},
+                    {id:'a2',team_id:'A',provider:'openai',available:true,submission_version:'v2',team_name:'A',is_latest:true}];
+  a.cs.selected=new Set(['a1']);
+  context.api=async(url,method,payload)=>{if(method==='PUT'){saved.push([...payload.submission_ids]);return {}}throw Error('unexpected '+url)};
+  const change=listeners.get('change');
+  await change({target:{dataset:{teamVersion:'A'},value:'a2'}});
+  assert.deepEqual(saved,[['a2']]);assert.deepEqual([...a.cs.selected],['a2']);
+  await change({target:{dataset:{teamVersion:'A'},value:''}});
+  assert.deepEqual(saved[1],[]);assert.equal(a.cs.selected.size,0);
+  context.api=async()=>{throw Error('offline')};a.cs.selected=new Set(['a1']);
+  await assert.rejects(change({target:{dataset:{teamVersion:'A'},value:'a2'}}),/offline/);
+  assert.deepEqual([...a.cs.selected],['a1']);                       // rolled back
+});
+
+test('launch summary follows team count and strategy',()=>{
+  const {a,fields,$}=setup();
+  a.cs.selected=new Set(['x','y']);fields.mode.value='self_refine';fields.calls.value='3';a.renderLaunchSummary();
+  assert.ok($('#launch-summary').innerHTML.includes('2 × 1,279 × 3 = 7,674'));
+  fields.mode.value='single_pass';fields.calls.value='3';a.renderLaunchSummary();   // Single-pass always counts one call
+  assert.ok($('#launch-summary').innerHTML.includes('2 × 1,279 × 1 = 2,558'));
+  a.cs.selected=new Set();a.renderLaunchSummary();assert.ok($('#launch-summary').innerHTML.includes('—'));
+});
+
+test('import notices tell a switched team apart from a newly added one',()=>{
+  const {a}=setup();
+  assert.equal(a.selectionNotice([{team_name:'A',submission_version:'v2',previous_version:'v1'},{team_name:'B',submission_version:'v1',previous_version:null}]),
+    '队伍 A 已从 v1 切换到 v2；队伍 B 的 v1 已加入参赛名单');
+  assert.equal(a.selectionNotice([]),'');
+});
+
+test('monitor page: red teams first, error breakdown, remaining time, results hidden only while running',async()=>{
+  const {context,a,$}=setup();
+  const run=(name,status,done,extra={})=>({run_id:name,team_id:name,name,submission_version:'v1',model:{model_id:'M'},status,completed:done,total:1279,error_count:0,infrastructure_errors:0,...extra});
+  const batch=(status,runs,extra={})=>({batch_id:'b',name:'正式',status,plan:{official:true,max_requests:7674},teams:runs.length,completed:600,total:2558,actual_calls:1500,elapsed_seconds:7200,error_count:0,runs,...extra});
+  context.api=async()=>batch('running',[run('Done','completed',1279),run('Run','running',500,{error_count:3,error_breakdown:{api_error:2,timeout:1,invalid_output:0,infrastructure_error:0}}),
+                                          run('Wait','queued',0),run('Bad','interrupted',200)]);
+  await a.showBatch('b');
+  const html=$('#batch-progress').innerHTML;
+  const at=n=>html.indexOf('"'+n+' / v1');
+  assert.ok(at('Bad')<at('Run')&&at('Run')<at('Wait')&&at('Wait')<at('Done'));          // red → running → queued → completed
+  assert.match(html,/3（接口 2 \/ 超时 1）/);assert.match(html,/预计剩余 6 小时 32 分/);        // (2558-600) × 7200 ÷ 600 = 23,496 s
+  assert.equal($('#results-view').hidden,true);assert.equal(a.cs.batchRunning,true);
+  assert.match($('#exception-actions').innerHTML,/data-flow-stop-batch/);assert.match($('#exception-actions').innerHTML,/data-flow-rerun=\\?"Bad/);
+  assert.match($('#exception-actions').innerHTML,/data-flow-stop=\\?"Run/);assert.equal($('#exception-panel').open,true);
+  context.api=async()=>batch('running',[run('Run','running',3)],{completed:3,total:2558,elapsed_seconds:60});
+  await a.showBatch('b');assert.match($('#batch-progress').innerHTML,/预计剩余 计算中/);   // fewer than 20 done
+  context.api=async()=>batch('completed',[run('Done','completed',1279)],{completed:2558});
+  await a.showBatch('b');
+  assert.equal($('#results-view').hidden,false);assert.equal(a.cs.batchRunning,false);assert.doesNotMatch($('#batch-progress').innerHTML,/预计剩余/);
+});
+
+test('durations are shown in hours and minutes',()=>{
+  const {a}=setup();
+  assert.equal(a.fmtDuration(20),'不足 1 分钟');assert.equal(a.fmtDuration(600),'10 分钟');assert.equal(a.fmtDuration(12000),'3 小时 20 分');
 });

@@ -1,20 +1,18 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.3</title><link rel="icon" type="image/png" href="/static/favicon.png?v=1.3-logo"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.3</title><link rel="icon" type="image/png" href="/static/favicon.png?v=1.3-logo"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script></head>
 <body>
 <aside><div class="brand"><div class="brand-heading"><img class="brand-logo" src="/static/favicon.png?v=1.3-logo" alt="" width="40" height="40"><span class="brand-title"><span>庙算杯</span><span>态势感知赛道</span></span></div><small>竞赛执行平台 · V1.3</small></div><nav aria-label="管理导航">
 <div class="nav-group" aria-labelledby="competition-nav"><h2 id="competition-nav">正式比赛</h2>
-<button data-tab="dataset" class="active">01　数据集管理</button>
-<button data-tab="submissions">02　参赛选手与配置</button>
-<button data-tab="batches">03　比赛设置与启动</button>
-<button data-tab="analytics">04　比赛结果与分析</button></div>
+<button type="button" id="flow-home">比赛流程</button></div>
 <div class="nav-group" aria-labelledby="developer-nav"><h2 id="developer-nav">开发者选项</h2>
 <button data-tab="models">01　模型配置</button>
 <button data-tab="prompts">02　Prompt 与推理</button>
 <button data-tab="create">03　创建测评任务</button>
 <button data-tab="monitor">04　任务监控</button></div></nav><p class="aside-note">主办方本地管理原型<br>Mock 成绩仅用于联调</p></aside>
-<main><header><div><span class="eyebrow">WARGAME EVALUATION</span><h1 id="title">数据集管理</h1></div><span id="health" class="badge">连接中</span></header>
+<main><header><div><span class="eyebrow">WARGAME EVALUATION</span><h1 id="title">数据集</h1><ol id="flow-stepper" class="stepper" aria-label="正式比赛流程" hidden></ol></div><span id="health" class="badge">连接中</span></header>
 <div id="notice" role="status" aria-live="polite" hidden></div>
+<div id="flow-status" class="status-line" role="status" aria-live="polite" hidden></div>
 <section id="dataset" class="page">
 <div id="stats" class="cards"></div>
 <div class="panel"><h2>导入已审核 QA</h2><p>只解析原始 Markdown，不修改题干、选项或 GT。重复导入相同文件安全；数量不符时整批拒绝。</p><div class="row"><button id="bundled">导入工作区原始 ZIP</button><form id="import-form" class="row"><input type="file" name="file" accept=".zip" required aria-label="QA ZIP"><button>上传 ZIP</button></form></div></div>
@@ -23,7 +21,6 @@
 <form id="map-form" class="grid3"><label>复盘 ID<input name="replay_id" required></label><label>图像 step<input name="image_step" type="number" min="0" value="0" required></label><label>图片资源<select name="image_id" id="image-select" required></select></label><button>关联这一帧的全部 QA</button></form>
 <details><summary>批量关联：粘贴 JSON 映射清单</summary><p>格式：[{"replay_id":"…","image_step":0,"image_id":"上传返回的哈希"}]。整批验证后写入。</p><textarea id="mapping-json" rows="3" aria-label="JSON 映射清单"></textarea><button id="batch-map">保存批量映射</button></details></div>
 <div class="panel"><h2>查询题目</h2><form id="search-form" class="row"><input name="question_id" placeholder="question_id" aria-label="题目 ID"><input name="replay_id" placeholder="replay_id" aria-label="复盘 ID"><select name="level" aria-label="层级"><option value="">全部层级</option><option>L1</option><option>L2</option><option>L3</option></select><select name="role" aria-label="题目角色"><option value="">主题与子题</option><option value="main">主问题</option><option value="sub">子问题</option></select><button>查询</button></form><div id="question-table"></div><div class="row"><button id="prev">上一页</button><span id="page-label"></span><button id="next">下一页</button></div><div id="question-detail"></div></div>
-<div class="row"><button type="button" id="go-submissions" class="secondary">下一步：导入参赛选手 →</button></div>
 </section>
 <section id="models" class="page" hidden>
 <div class="panel"><h2>模型 API 配置</h2><p>支持 OpenAI-compatible 多模态接口；Base URL 通常以 /v1 结尾。API Key 加密保存，编辑留空可保留原凭据。公网 HTTPS 地址在保存和每次连接时校验。</p>
@@ -40,7 +37,8 @@
 <section id="monitor" class="page" hidden><div class="panel"><h2>持久化任务队列 <small>每 2 秒刷新</small></h2><p>安全停止等待当前请求完成或超时，然后阻止下一次调用。浏览器刷新不影响任务；服务进程中断会保留记录并标记可重跑。</p><div id="run-list"></div></div></section>
 
 <section id="submissions" class="page" hidden>
-<div class="panel"><h2>导入选手 JSON 配置</h2>
+<details class="panel" id="import-panel" open><summary><strong>导入选手配置</strong> <span class="muted">先导入，再在下方选择参赛版本；已有名单时自动收起</span></summary>
+<div>
 <p>每支队伍提交一份 JSON，支持一次选择多个文件。导入后自动保存队伍、模型和三段 Prompt，不连接模型、不产生 API 费用。请通过安全渠道交付包含 API Key 的文件。</p>
 <div class="row"><a id="json-example" href="/api/submissions/json/example" download="参赛配置示例.json">下载 JSON 配置示例</a></div>
 <form id="json-upload" class="row"><input name="files" type="file" accept=".json,application/json" multiple required aria-label="参赛者 JSON 配置文件"><button type="submit">导入参赛配置</button></form>
@@ -50,16 +48,24 @@
 <div><h2>Excel / CSV 批量导入选手配置</h2><p>一行一份方案，三段 Prompt 由选手设计，模式由主办方统一选择。请先下载模板。导入不测试连接、不调用模型；预览仅显示凭据是否提供。相同队伍与版本重复导入会跳过，内容变更请使用新版本。</p>
 <div class="row"><a href="/api/submissions/template?format=xlsx">Excel 模板</a><a href="/api/submissions/template?format=csv">CSV 模板</a></div>
 <form id="submission-upload" class="row"><input name="file" type="file" accept=".xlsx,.csv" required aria-label="参赛配置文件"><button>解析并预览</button></form><div id="import-preview"></div><button id="confirm-import" disabled>确认整批导入</button></div></details>
-<div class="panel"><h2>已导入选手 · 参赛名单</h2><p>在这里统一查看与勾选参赛队伍；每队只能选择一个方案版本。默认自动选取每队最新可用版本。比赛设置页不再重复选择。</p><div class="row"><input id="team-filter" placeholder="筛选队伍或模型" aria-label="筛选队伍"><button id="select-teams">全选筛选结果</button><button id="clear-teams" class="secondary">全部取消</button><button id="reset-roster-latest" class="secondary">恢复为每队最新版本</button></div><div id="batch-submissions"></div><p class="form-help" id="submission-selection-status"></p><button type="button" id="go-batches">下一步：设置比赛并启动 →</button></div></section>
+</details>
+<div class="panel" id="roster-panel"><h2>参赛名单</h2><p>每支队伍只能选一个版本，默认每队最新版本；导入新版本后会自动切换，请在这里核对。</p><div class="row"><input id="team-filter" placeholder="按队伍或模型搜索" aria-label="搜索队伍"><button id="reset-roster-latest" class="secondary">全部选最新版本</button><button id="clear-teams" class="secondary">清空名单</button></div><div id="batch-submissions"></div><p class="form-help" id="submission-selection-status"></p></div></section>
 <section id="batches" class="page" hidden>
-
-<div class="panel"><h2>比赛参数 · 一键开始</h2><p>全量 1,279 道 QA（固定） · 全部四维 · 仅真实模型与真实截图。开发调试请使用“开发者选项”。</p>
-<form id="batch-form" class="grid2"><label>比赛 / 批次名称<input name="name" value="兵棋多模态智能体竞赛 · 正式测评" required maxlength="100"></label><label>统一推理模式<select name="mode"><option value="single_pass">Single-pass · 单次推理</option><option value="self_refine" selected>Self-refine · 多轮检查修正</option><option value="majority_vote">Majority-vote · 独立采样投票</option></select></label><label>每题最大调用次数<select name="calls" required aria-describedby="batch-calls-help"></select></label><label class="inline"><input name="early_stop" type="checkbox">Self-refine 稳定答案提前结束（最多按所选次数调用）</label><p id="batch-calls-help" class="form-help"></p><div class="row"><button id="start-official-batch">开始正式测评</button><span id="batch-launch-status" role="status" aria-live="polite"></span></div></form></div>
-<div class="panel"><h2>测评进度与历史批次 <small>每 3 秒刷新</small></h2><div id="batch-list"></div></div><div id="batch-progress" class="panel" hidden></div></section>
+<div class="split">
+<div class="panel pane"><h2>比赛设置</h2><p>全量 1,279 道 QA · 四个维度 · 仅真实模型与真实截图。开发调试请使用“开发者选项”。</p>
+<form id="batch-form" class="stack"><label>比赛 / 批次名称<input name="name" value="兵棋多模态智能体竞赛 · 正式测评" required maxlength="100"></label><label>统一推理模式<select name="mode"><option value="single_pass">Single-pass · 单次推理</option><option value="self_refine" selected>Self-refine · 多轮检查修正</option><option value="majority_vote">Majority-vote · 独立采样投票</option></select></label><label>每题最大调用次数<select name="calls" required aria-describedby="batch-calls-help"></select></label><label class="inline"><input name="early_stop" type="checkbox">Self-refine 稳定答案提前结束（最多按所选次数调用）</label><p id="batch-calls-help" class="form-help"></p><div class="row"><button id="start-official-batch">开始正式测评</button><span id="start-gate-reason" class="gate-reason"></span><span id="batch-launch-status" role="status" aria-live="polite"></span></div></form></div>
+<div class="panel pane"><h2>本轮概览</h2><p>随左侧设置实时更新；最终数字以点击“开始正式测评”后的确认窗口为准。</p><div id="launch-summary"></div></div>
+</div></section>
 <section id="analytics" class="page" hidden>
+<div id="batch-progress" class="panel" hidden></div>
+<details id="exception-panel" class="panel" hidden><summary>异常处理：停止 / 重跑 / 标记平台故障</summary><div id="exception-actions"></div></details>
+<div id="results-view">
 <div class="panel"><h2>选择竞赛批次</h2><div class="row"><select id="analytics-batch" aria-label="分析批次"></select><select id="analytics-top" aria-label="图表 Top N"><option value="5">Top 5</option><option value="10" selected>Top 10</option><option value="0">全部队伍</option></select><select id="analytics-audience" aria-label="报告版本"><option value="public">公开版</option><option value="admin">管理员统计详细版</option></select><button id="refresh-analytics">刷新分析</button></div><p>同批次也会按 Mock / 正式类型、数据与截图、模式、预算、提前结束设置分别排名。未完成或主办方故障的任务不进入最终排名。不进行多批次比较或其他模式成绩推断。</p><div id="analytics-teams"></div><div id="competition-exports" class="row"></div></div><div id="competition-summary"></div><div id="competition-groups"></div><details class="panel" id="historical-report"><summary>历史报告与单次测评排行榜</summary><div class="panel"><h2>排行榜与成绩比较</h2><div class="row"><select id="board-kind" aria-label="成绩类型"><option value="official">正式全量比赛</option><option value="mock">Mock 联调（非正式）</option><option value="partial_test">真实模型测试（非正式）</option></select><button id="refresh-board">刷新</button></div><p>综合分 = 100 × (0.35 L2主 + 0.35 L3主 + 0.15 L1子 + 0.15 L2子)。局部缺失维度记零，不重新归一化。正式榜按相同规则组分别排名。</p><div id="leaderboard"></div></div></details>
+</div>
+<details class="panel" id="history-panel"><summary>历史批次</summary><div id="batch-list"></div></details>
 </section>
 <section id="run-detail" class="panel" hidden></section>
 <footer>V1.3 · 本地单管理员原型。聚合代理内部调用不可观测，平台预算只限制可见的请求。正式比赛前请准备真实截图与有效模型凭据。</footer>
-</main><dialog id="official-start-dialog" aria-labelledby="official-start-title"><h2 id="official-start-title">确认启动正式比赛</h2><div id="official-start-summary"></div><p class="warn">确认后将自动创建并启动所有参赛队伍的正式测评任务，真实模型 API 调用可能产生费用。</p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认并开始测评</button></form></dialog>
+</main><dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">请确认</h2><p id="confirm-text"></p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认</button></form></dialog>
+<dialog id="official-start-dialog" aria-labelledby="official-start-title"><h2 id="official-start-title">确认启动正式比赛</h2><div id="official-start-summary"></div><p class="warn">确认后将自动创建并启动所有参赛队伍的正式测评任务，真实模型 API 调用可能产生费用。</p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认并开始测评</button></form></dialog>
 </body></html>
