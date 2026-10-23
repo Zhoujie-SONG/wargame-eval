@@ -7,7 +7,7 @@ aside{display:flex;flex-direction:column}aside nav{flex:1;min-height:0;max-heigh
 
 aside nav{max-height:none}@media(max-width:700px){aside nav{display:block;flex:auto;max-height:40vh;overflow-y:auto;margin-top:12px}nav button{width:100%;padding:9px 12px}.nav-group+.nav-group{margin-top:12px;padding-top:12px}}
 
-/* V1.3 four-step official competition workflow */
+/* V1.4 four-step official competition workflow */
 #legacy-import summary, #historical-report summary { cursor: pointer; font-weight: 650; padding: 6px 0; }
 #json-import-status { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; color: var(--muted, #54667a); }
 #submission-selection-status { margin: 12px 0; }
@@ -22,14 +22,10 @@ aside nav{max-height:none}@media(max-width:700px){aside nav{display:block;flex:a
 #official-start-dialog {max-width:960px;max-height:85vh;overflow-y:auto}
 #official-start-summary {overflow-x:auto}
 
-/* V1.4 flow: step bar, status line, equal panes, Chinese status badges */
+/* V1.4 flow: sidebar readiness, status line, equal panes, Chinese status badges */
 header>div:first-child{flex:1;min-width:0;margin-right:20px}
-.stepper{list-style:none;display:flex;gap:10px;margin:8px 0 0;padding:0}
-.stepper li{flex:1;min-width:0}
-.step{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;color:#4a5b70;border:1px solid #dfe6ee;border-radius:8px;padding:10px 14px;white-space:normal}
-.step:hover{filter:none;border-color:#9db4cc}
-.step.current{border-color:#235d91;box-shadow:inset 0 -3px 0 #235d91;color:#183e68;font-weight:650}
-.step .label small{display:block;font-size:11px;font-weight:400;color:#7f90a5;line-height:1.2}
+.flow-nav button{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.flow-nav .dot{width:20px;height:20px;font-size:11px}
 .dot{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;font-size:13px;font-weight:700;background:#eef2f6;color:#74849a}
 .state-done>.dot,.state-done .dot{background:#e4f2ed;color:#21785f}
 .state-warning>.dot,.state-warning .dot{background:#fff3ce;color:#9a6400}
@@ -58,4 +54,3 @@ dl.kv>div:last-child{border-bottom:none}dl.kv dt{color:#74849a}dl.kv dd{margin:0
 .empty-hint{color:#7f90a5;padding:18px 0}
 .table-scroll{overflow-x:auto}
 @media(max-width:1000px){.split{grid-template-columns:1fr}.overall{flex-wrap:wrap}.overall span{white-space:normal}}
-@media(max-width:720px){.step .label{font-size:0}.step .label small{font-size:11px}.stepper{gap:6px}.step{justify-content:center;padding:10px 6px}}

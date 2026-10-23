@@ -30,18 +30,18 @@ function answerDialog($,answer){const d=$('#official-start-dialog');let close;d.
 
 test('group numbering remains independent; formal form has one primary action and no test controls',()=>{
   const html=fs.readFileSync('app/web/index.html','utf8'),nav=html.match(/<nav[\s\S]*?<\/nav>/)[0],form=html.match(/<form id="batch-form"[\s\S]*?<\/form>/)[0];
-  assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['models','prompts','create','monitor']);
-  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04']);
-  assert.match(nav,/id="flow-home"/);
+  assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['dataset','submissions','batches','analytics','models','prompts','create','monitor']);
+  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04','01','02','03','04']);
+  assert.match(nav,/class="flow-nav"/);
   for(const key of ['dataset','submissions','batches','analytics'])assert.match(html,new RegExp('<section id="'+key+'" class="page"'));
-  assert.match(html,/id="flow-stepper"/);assert.match(html,/id="flow-status"/);assert.match(html,/src="\/static\/flow\.js"/);
+  assert.doesNotMatch(html,/id="flow-stepper"|id="flow-home"/);assert.match(html,/id="flow-status"/);assert.match(html,/src="\/static\/flow\.js"/);
   assert.doesNotMatch(html,/下一步/);assert.doesNotMatch(html,/id="go-(?:batches|submissions)"/);
   assert.match(html,/id="historical-report"/);
   assert.doesNotMatch(form,/batch_test|batch-test-mode|name="(?:dimension|limit|question_ids)"|save-batch|readonly/);
   assert.equal((form.match(/<button/g)||[]).length,1);assert.match(form,/开始正式测评/);assert.match(form,/value="self_refine" selected/);
 });
 
-test('V1.3 page initialization reaches dynamic calls setup with its real element IDs',async()=>{
+test('V1.4 page initialization reaches dynamic calls setup with its real element IDs',async()=>{
   const {context,fields,$,listeners}=setup();
   assert.equal($('#refresh-submissions'),null);
   context.state.settings.competition.max_calls_per_question=5;

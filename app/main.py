@@ -41,7 +41,7 @@ async def lifespan(app):
     await runner.close()
 
 
-app = FastAPI(title='兵棋多模态智能体竞赛测评系统', version='1.3.0', lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title='庙算杯态势感知赛道测评系统', version='1.4.0', lifespan=lifespan, docs_url=None, redoc_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', '[::1]', 'testserver'])
 
 
@@ -73,7 +73,7 @@ async def validation_error(request, exc):
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'version': '1.3.0'}
+    return {'status': 'ok', 'version': '1.4.0'}
 
 
 @app.get('/docs', include_in_schema=False)

@@ -1,6 +1,6 @@
 """State of the four official-competition steps, decided once on the server.
 
-The step bar, the per-page status line and the gated buttons only display this
+The sidebar navigation, the per-page status line and the gated buttons only display this
 result; the browser never re-implements these rules.
 
 Check levels: ok (satisfied) / info (neutral note) / warn (can proceed, needs a look) /

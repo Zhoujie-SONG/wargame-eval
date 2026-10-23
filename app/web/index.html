@@ -1,16 +1,21 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.3</title><link rel="icon" type="image/png" href="/static/favicon.png?v=1.3-logo"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.4</title><link rel="icon" type="image/png" href="/static/favicon.png?v=1.4-logo"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script></head>
 <body>
-<aside><div class="brand"><div class="brand-heading"><img class="brand-logo" src="/static/favicon.png?v=1.3-logo" alt="" width="40" height="40"><span class="brand-title"><span>庙算杯</span><span>态势感知赛道</span></span></div><small>竞赛执行平台 · V1.3</small></div><nav aria-label="管理导航">
+<aside><div class="brand"><div class="brand-heading"><img class="brand-logo" src="/static/favicon.png?v=1.4-logo" alt="" width="40" height="40"><span class="brand-title"><span>庙算杯</span><span>态势感知赛道</span></span></div><small>竞赛执行平台 · V1.4</small></div><nav aria-label="管理导航">
 <div class="nav-group" aria-labelledby="competition-nav"><h2 id="competition-nav">正式比赛</h2>
-<button type="button" id="flow-home">比赛流程</button></div>
+<div class="flow-nav" aria-label="正式比赛流程">
+<button type="button" data-tab="dataset">01　数据集<span class="dot" aria-hidden="true">○</span></button>
+<button type="button" data-tab="submissions">02　参赛名单<span class="dot" aria-hidden="true">○</span></button>
+<button type="button" data-tab="batches">03　设置并启动<span class="dot" aria-hidden="true">○</span></button>
+<button type="button" data-tab="analytics">04　监控与结果<span class="dot" aria-hidden="true">○</span></button>
+</div></div>
 <div class="nav-group" aria-labelledby="developer-nav"><h2 id="developer-nav">开发者选项</h2>
 <button data-tab="models">01　模型配置</button>
 <button data-tab="prompts">02　Prompt 与推理</button>
 <button data-tab="create">03　创建测评任务</button>
 <button data-tab="monitor">04　任务监控</button></div></nav><p class="aside-note">主办方本地管理原型<br>Mock 成绩仅用于联调</p></aside>
-<main><header><div><span class="eyebrow">WARGAME EVALUATION</span><h1 id="title">数据集</h1><ol id="flow-stepper" class="stepper" aria-label="正式比赛流程" hidden></ol></div><span id="health" class="badge">连接中</span></header>
+<main><header><div><span class="eyebrow">WARGAME EVALUATION</span><h1 id="title">数据集</h1></div><span id="health" class="badge">连接中</span></header>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <div id="flow-status" class="status-line" role="status" aria-live="polite" hidden></div>
 <section id="dataset" class="page">
@@ -65,7 +70,7 @@
 <details class="panel" id="history-panel"><summary>历史批次</summary><div id="batch-list"></div></details>
 </section>
 <section id="run-detail" class="panel" hidden></section>
-<footer>V1.3 · 本地单管理员原型。聚合代理内部调用不可观测，平台预算只限制可见的请求。正式比赛前请准备真实截图与有效模型凭据。</footer>
+<footer>V1.4 · 本地单管理员原型。聚合代理内部调用不可观测，平台预算只限制可见的请求。正式比赛前请准备真实截图与有效模型凭据。</footer>
 </main><dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">请确认</h2><p id="confirm-text"></p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认</button></form></dialog>
 <dialog id="official-start-dialog" aria-labelledby="official-start-title"><h2 id="official-start-title">确认启动正式比赛</h2><div id="official-start-summary"></div><p class="warn">确认后将自动创建并启动所有参赛队伍的正式测评任务，真实模型 API 调用可能产生费用。</p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认并开始测评</button></form></dialog>
 </body></html>

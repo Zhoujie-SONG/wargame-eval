@@ -1,5 +1,5 @@
 'use strict';
-// Step bar, per-page status line and button gating for the four official pages.
+// Sidebar readiness, per-page status line and button gating for the four official pages.
 // All state comes from GET /api/competition/status; nothing here decides readiness.
 (()=>{
 const FLOW=[['dataset','数据集'],['submissions','参赛名单'],['batches','设置并启动'],['analytics','监控与结果']];
@@ -7,19 +7,22 @@ const ICON={done:'✓',warning:'!',blocked:'✗',todo:'○',running:'●'};
 const STATE_TEXT={done:'已完成',warning:'需确认',blocked:'未就绪',todo:'未开始',running:'进行中'};
 const CHIP={ok:'✓',info:'i',warn:'!',bad:'✗'};
 const hadHash=!!location.hash;
-let flow=null,tab='dataset',lastFormal=null,timer=null,jumped=false;
+let flow=null,tab='dataset',timer=null,jumped=false;
 const isFlow=t=>FLOW.some(([k])=>k===t);
 const step=key=>flow&&flow.steps.find(s=>s.key===key);
 
 function tip(s){return STATE_TEXT[s.state]+'：'+s.message+(s.missing.length?'\n'+s.missing.join('\n'):'')}
 
-function renderStepper(){
-  const box=$('#flow-stepper');
-  box.innerHTML=FLOW.map(([key,name],i)=>{
+function renderNav(){
+  FLOW.forEach(([key])=>{
+    const button=$('.flow-nav [data-tab="'+key+'"]');
     const s=step(key)||{state:'todo',message:'',missing:[]};
-    return '<li><button type="button" class="step state-'+s.state+(tab===key?' current':'')+'" data-flow-tab="'+key+'" title="'+e(tip(s))+'"'+(tab===key?' aria-current="step"':'')+'>'
-      +'<span class="dot">'+ICON[s.state]+'</span><span class="label"><small>'+String(i+1).padStart(2,'0')+'</small>'+e(name)+'</span></button></li>';
-  }).join('');
+    button.className='state-'+s.state+(tab===key?' active':'');
+    button.title=tip(s);
+    button.querySelector('.dot').textContent=ICON[s.state];
+    if(tab===key)button.setAttribute('aria-current','page');
+    else button.removeAttribute('aria-current');
+  });
 }
 
 function renderStatus(){
@@ -42,19 +45,12 @@ function renderGate(){
   if(why)why.textContent=gated?(s.state==='running'?'比赛进行中，设置已冻结':(s.missing[0]||'')):'';
 }
 
-function renderNav(){
-  const home=$('#flow-home');
-  if(home)home.classList.toggle('active',isFlow(tab));
-}
-
 function render(){
   const formal=isFlow(tab);
-  $('#flow-stepper').hidden=!formal;
   $('#flow-status').hidden=!formal;
-  $('#title').hidden=formal;
   renderNav();
   if(!formal||!flow)return;
-  renderStepper();renderStatus();renderGate();
+  renderStatus();renderGate();
 }
 
 async function refresh(){
@@ -68,16 +64,13 @@ let pending=null;
 function refreshSoon(){clearTimeout(pending);pending=setTimeout(()=>{if(isFlow(tab))refresh()},800)}
 
 document.addEventListener('wargame:tab',ev=>{
-  tab=ev.detail;if(isFlow(tab))lastFormal=tab;
+  tab=ev.detail;
   render();
   if(isFlow(tab)){refresh();if(!timer)timer=setInterval(()=>{if(isFlow(tab))refresh()},10000)}
 });
 // Anything the organizer does may change a step; re-read the server state shortly after.
 document.addEventListener('click',ev=>{
-  const go=ev.target.closest('[data-flow-tab]');
-  if(go){switchTab(go.dataset.flowTab).catch(err=>notice(err.message,true));return}
   if(ev.target.closest('button'))refreshSoon();
 });
 document.addEventListener('change',refreshSoon);
-$('#flow-home').onclick=()=>switchTab(lastFormal||(flow&&flow.suggested_tab)||'dataset').catch(err=>notice(err.message,true));
 })();
