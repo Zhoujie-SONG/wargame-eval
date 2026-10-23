@@ -47,6 +47,7 @@ def init_db():
           id TEXT PRIMARY KEY, team_id TEXT REFERENCES teams(id), version TEXT NOT NULL,
           name TEXT NOT NULL, model_id TEXT NOT NULL, prompt_id TEXT NOT NULL,
           fingerprint TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(team_id,version));
+        CREATE TABLE IF NOT EXISTS organizer_state (key TEXT PRIMARY KEY, body TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS import_previews (
           id TEXT PRIMARY KEY, secret TEXT, created_at TEXT NOT NULL, result TEXT);
         CREATE TABLE IF NOT EXISTS evaluation_batches (
