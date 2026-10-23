@@ -31,7 +31,7 @@ async function confirmOfficialStart(batch){
       e(item.credential_source||'已提供')];
     if(showPreflight)cells.push(item.preflight_result==null?'—':e(String(item.preflight_result)));
     return cells;
- }):[]):'<p>未返回参赛名单；请取消并重新检查批次预览。</p>';
+ })):'<p>未返回参赛名单；请取消并重新检查批次预览。</p>';
  const warning=outdated.length?'<p class="roster-warning" role="alert">注意：有 '+outdated.length+' 支队伍存在未选中的更新版本；请核对后再确认启动。</p>':'';
  $('#official-start-summary').innerHTML=summary+warning+roster;
  return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true});dialog.returnValue='cancel';dialog.showModal()});
