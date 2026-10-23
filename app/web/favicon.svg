@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <title>Wargame-Eval</title>
-  <rect width="64" height="64" rx="14" fill="#11243b"/>
-  <path d="M11 11h42v42H11zM11 25h42M11 39h42M25 11v42M39 11v42"
-        fill="none" stroke="#31516f" stroke-width="1.5"/>
-  <path d="M27 15h22l-6 9 6 9H27z" fill="#5ee0ca"/>
-  <path d="M26 15v34M18 49h24" fill="none" stroke="#f0f7ff"
-        stroke-width="4" stroke-linecap="round"/>
-</svg>
