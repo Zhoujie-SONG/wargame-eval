@@ -1,7 +1,7 @@
 name: Monitor regression and frontend tests
 on:
   push:
-    branches: [perf-monitor-preflight-20261023]
+    branches: [main, perf-monitor-preflight-20261023]
   pull_request:
   workflow_dispatch:
 
