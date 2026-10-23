@@ -9,6 +9,7 @@ from app.core.model_client import make_client
 from app.core.security import credentials, encrypt, decrypt
 from app.core.inference import infer, Stopped
 from app.core.scorer import score
+from app.services.monitor import ensure as ensure_monitor, lightweight_report, set_times
 
 
 def now():
@@ -81,6 +82,7 @@ def create_run(data):
     with db() as c:
         c.execute('INSERT INTO runs(id,status,created_at,body,secret) VALUES(?,?,?,?,?)',
                   (run_id, 'queued', now(), dumps(snapshot), secret))
+        ensure_monitor(c,run_id,snapshot)
     return run_id
 
 
@@ -93,6 +95,8 @@ def load_run(run_id):
 
 
 def report(run_id, include_results=True):
+    if not include_results:
+        return lightweight_report(run_id)
     row, body = load_run(run_id)
     with db() as c:
         results = {r['question_id']: json.loads(r['body']) for r in c.execute('SELECT * FROM results WHERE run_id=?', (run_id,))}
@@ -179,6 +183,7 @@ class Runner:
         body['started_at'] = now()
         with db() as c:
             c.execute("UPDATE runs SET status='running',body=? WHERE id=?", (dumps(body), run_id))
+            set_times(c,run_id,started=body['started_at'])
         client = make_client(body['model'], decrypt(row['secret']))
         def should_stop():
             with db() as c:
@@ -189,7 +194,7 @@ class Runner:
             qid = q['question_id']
             def save_call(record):
                 with db() as c:
-                    c.execute('INSERT OR REPLACE INTO calls VALUES(?,?,?,?)', (run_id, qid, record['ordinal'], dumps(record)))
+                    c.execute('INSERT INTO calls(run_id,question_id,ordinal,body) VALUES(?,?,?,?) ON CONFLICT(run_id,question_id,ordinal) DO UPDATE SET body=excluded.body', (run_id, qid, record['ordinal'], dumps(record)))
             # The model path receives only these public fields; private QA stays here for scoring.
             public = {k: q[k] for k in ('input_text', 'question_type', 'options', 'image')}
             try:
@@ -210,6 +215,7 @@ class Runner:
         body['finished_at'] = now()
         with db() as c:
             c.execute('UPDATE runs SET status=?,body=? WHERE id=?', ('stopped' if should_stop() else 'completed', dumps(body), run_id))
+            set_times(c,run_id,finished=body['finished_at'])
 
 
 runner = Runner()
