@@ -134,5 +134,5 @@ test('roster is persisted by server and restore-latest explicitly replaces stale
  };
  await a.loadSubmissions();assert.ok(a.cs.selected.has('old'));assert.ok(!a.cs.selected.has('new'));
  await a.restoreLatestRoster();assert.ok(a.cs.selected.has('new'));assert.ok(!a.cs.selected.has('old'));
- assert.equal(selected.length,1);assert.deepEqual(selected[0],['new']);
+ assert.equal(selected.length,1);assert.deepEqual([...selected[0]],['new']);
 });
