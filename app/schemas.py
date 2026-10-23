@@ -74,6 +74,10 @@ class BatchConfig(Strict):
     limit: int | None = Field(default=None, ge=1, le=10000)
 
 
+class OfficialRoster(Strict):
+    submission_ids: list[str] = Field(default_factory=list,max_length=100)
+
+
 class BatchStart(Strict):
     confirm_official: bool = False
 
