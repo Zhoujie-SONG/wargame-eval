@@ -14,14 +14,14 @@ function setup(storage=new Map()){
   $('#batch-form').elements=fields;$('#batch-form').querySelectorAll=()=>Object.values(fields);
   const context={$,crypto,URLSearchParams,Set,Image:class{},labels:{},state:{settings:{competition:{max_calls_per_question:3}}},
     form:()=>Object.fromEntries(Object.entries(fields).filter(([,v])=>!v.disabled).map(([k,v])=>[k,v.value])),
-    e:String,table:(h,r)=>JSON.stringify(r),action:fn=>fn,options:()=>{},notice:()=>{},setInterval:()=>{},percent:String,
+    e:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'),table:(h,r)=>JSON.stringify(r),action:fn=>fn,options:()=>{},notice:()=>{},setInterval:()=>{},percent:String,
     sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     localStorage:{getItem:k=>rosterStorage.get(k)??null,setItem:(k,v)=>rosterStorage.set(k,v),removeItem:k=>rosterStorage.delete(k)},
     document:{addEventListener:(event,fn)=>listeners.set(event,fn),body:{addEventListener:()=>{}},querySelectorAll:()=>[]},api:async()=>{throw Error('Unexpected API call')}};
   vm.createContext(context);
   const app=fs.readFileSync('app/web/app.js','utf8');
   vm.runInContext(app.slice(app.indexOf('function populateCalls('),app.indexOf('function selectPrompt(')),context);
-  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadAnalytics,cs};})();');
+  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadSubmissions,restoreLatestRoster,loadAnalytics,cs};})();');
   vm.runInContext(source,context);
   return {context,fields,$,a:context.testAPI,storage,listeners};
 }
@@ -42,7 +42,7 @@ test('V1.3 page initialization reaches dynamic calls setup with its real element
   assert.equal($('#refresh-submissions'),null);
   context.state.settings.competition.max_calls_per_question=5;
   fields.calls.value='';
-  context.api=async url=>{assert.ok(['/submissions','/evaluation-batches'].includes(url));return []};
+  context.api=async url=>{assert.ok(['/submissions','/submissions/official-roster','/evaluation-batches'].includes(url));return url==='/submissions/official-roster'?{submission_ids:[]} : []};
   await listeners.get('wargame:tab')({detail:'batches'});
   assert.equal((fields.calls.innerHTML.match(/<option/g)||[]).length,5);
   assert.equal(fields.calls.value,'5');assert.equal(fields.calls.disabled,false);
@@ -103,4 +103,36 @@ test('analytics discards a delayed response from a previously selected batch',as
   $('#analytics-batch').value='old-batch';$('#analytics-top').value='10';context.api=()=>new Promise(r=>resolve=r);
   const pending=a.loadAnalytics();$('#analytics-batch').value='new-batch';$('#competition-summary').innerHTML='new-batch results';resolve({official:true});await pending;
   assert.equal($('#competition-summary').innerHTML,'new-batch results');assert.equal($('#competition-exports').innerHTML,'');
+});
+
+
+test('confirmation lists exact frozen versions and highlights newer unselected versions with XSS escaping',async()=>{
+ const {a,$}=setup();answerDialog($,'cancel');
+ a.cs.submissions=[{id:'s1',team_id:'t1',submission_version:'v1',is_latest:false},
+   {id:'s2',team_id:'t1',submission_version:'v2',is_latest:true}];
+ const items=[{team_id:'t1',team_name:'<img src=x onerror=alert(1)>',
+   submission_version:'v1',model_id:'<script>oops</script>',
+   is_aggregator:true,prompt_version:'pr-v3',credential_source:'环境变量'}];
+ await a.confirmOfficialStart({name:'official',plan:{...plan,items}});
+ const html=$('#official-start-summary').innerHTML;
+ assert.match(html,/v1/);assert.match(html,/pr-v3/);assert.match(html,/有更新版本 v2/);
+ assert.match(html,/roster-warning/);assert.match(html,/环境变量/);
+ assert.ok(html.includes('&lt;img'));assert.ok(!html.includes('<script>'));
+});
+
+test('roster is persisted by server and restore-latest explicitly replaces stale selections',async()=>{
+ const {context,a}=setup();const selected=[];
+ const submissions=[
+   {id:'new',team_id:'t',team_name:'T',model_id:'M',submission_version:'v2',is_latest:true,provider:'openai',available:true},
+   {id:'old',team_id:'t',team_name:'T',model_id:'M',submission_version:'v1',is_latest:false,latest_version:'v2',provider:'openai',available:true}
+ ];
+ context.api=async(url,method,payload)=>{
+   if(url==='/submissions')return submissions;
+   if(url==='/submissions/official-roster'&&method==='PUT'){selected.push(payload.submission_ids);return {configured:true,submission_ids:payload.submission_ids}};
+   if(url==='/submissions/official-roster')return {configured:true,submission_ids:['old']};
+   throw Error('unexpected '+url);
+ };
+ await a.loadSubmissions();assert.ok(a.cs.selected.has('old'));assert.ok(!a.cs.selected.has('new'));
+ await a.restoreLatestRoster();assert.ok(a.cs.selected.has('new'));assert.ok(!a.cs.selected.has('old'));
+ assert.equal(selected.length,1);assert.deepEqual(selected[0],['new']);
 });
