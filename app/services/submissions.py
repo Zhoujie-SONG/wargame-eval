@@ -142,7 +142,15 @@ def confirm_import(identity):
             raise ValueError('导入预览已过期，请重新上传')
         payload=json.loads(decrypt(row['secret']))
         if payload['summary']['errors']:raise ValueError('预览含错误，整批不导入；请修正后重新上传')
-        created=[];duplicates=payload['summary']['duplicates']
+        created=[];duplicates=payload['summary']['duplicates'];selection_updates=[]
+        saved=c.execute("SELECT body FROM organizer_state WHERE key='official_roster'").fetchone()
+        if saved:
+            roster=set(json.loads(saved['body']))
+        else:
+            roster=set();seen=set()
+            for old in c.execute("SELECT s.id,s.team_id,m.body AS model FROM submissions s JOIN models m ON m.id=s.model_id ORDER BY s.team_id,s.created_at DESC,s.rowid DESC"):
+                if old['team_id'] not in seen and json.loads(old['model'])['provider']!='mock':
+                    roster.add(old['id']);seen.add(old['team_id'])
         for r in payload['rows']:
             old=c.execute('SELECT id,fingerprint FROM submissions WHERE team_id=? AND version=?',(r['team_id'],r['version'])).fetchone()
             if old:
@@ -158,7 +166,16 @@ def confirm_import(identity):
             c.execute('INSERT INTO prompts VALUES(?,?)',(pid,dumps(prompt)))
             c.execute('INSERT INTO submissions VALUES(?,?,?,?,?,?,?,?)',(sid,r['team_id'],r['version'],r['name'],mid,pid,r['fingerprint'],now()))
             created.append(sid)
-        result={'imported':len(created),'duplicates':duplicates,'submission_ids':created,'api_requests':0}
+            if model['provider']!='mock':
+                for old in c.execute('SELECT id FROM submissions WHERE team_id=?',(r['team_id'],)):
+                    roster.discard(old['id'])
+                roster.add(sid)
+                selection_updates.append({'team_id':r['team_id'],'team_name':r['name'],
+                                          'submission_version':r['version'],'submission_id':sid})
+        if selection_updates:
+            c.execute("INSERT INTO organizer_state(key,body) VALUES('official_roster',?) ON CONFLICT(key) DO UPDATE SET body=excluded.body",(dumps(sorted(roster)),))
+        result={'imported':len(created),'duplicates':duplicates,'submission_ids':created,
+                'api_requests':0,'selection_updates':selection_updates}
         c.execute('UPDATE import_previews SET secret=NULL,result=? WHERE id=?',(dumps(result),identity))
     return result
 
