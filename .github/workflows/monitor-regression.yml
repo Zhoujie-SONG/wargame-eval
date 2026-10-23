@@ -19,6 +19,17 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+      - name: Excel newline integrity diagnostic
+        run: |
+          python - <<'PY'
+          from app.services import submissions as s
+          rows=s.template_rows(True)
+          rows[0][8]='中文逗号, "引号"\\n第二行\\r\\n第三行'.replace('\\n','\n').replace('\\r','\r')
+          doc=s.spreadsheet_bytes(s.FIELDS,rows)
+          header,roundtrip=s.read_rows(doc,'test.xlsx')
+          print('excel raw repr:',repr(rows[0][8]))
+          print('excel parsed repr:',repr(roundtrip[0][1][8]))
+          PY
       - name: Python tests (no real model calls)
         run: python -m pytest -q
       - name: JavaScript syntax check
