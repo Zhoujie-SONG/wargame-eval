@@ -221,9 +221,9 @@ def template_rows(mock=False):
 
 
 def spreadsheet_bytes(headers,rows,sheet_name='submissions'):
-    book=Workbook();book.properties.keywords='wargame-crlf-preserved-v1';sheet=book.active;sheet.title=sheet_name;sheet.append(headers)
+    book=Workbook();book.properties.keywords='wargame-crlf-preserved-v1' if sheet_name=='submissions' else '';sheet=book.active;sheet.title=sheet_name;sheet.append(headers)
     for row in rows:
-        sheet.append([_excel_encode_text(v) if isinstance(v,str) else v for v in row])
+        sheet.append([_excel_encode_text(v) if sheet_name=='submissions' and isinstance(v,str) else v for v in row])
         for cell in sheet[sheet.max_row]:
             if isinstance(cell.value,str):cell.data_type='s'
             cell.alignment=Alignment(vertical='top',wrap_text=True)
