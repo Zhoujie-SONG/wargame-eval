@@ -22,6 +22,8 @@ jobs:
       - name: Python tests (no real model calls)
         run: python -m pytest -q
       - name: Frontend tests
+        if: always()
         run: node --test tests/frontend_batch_mode.test.cjs
       - name: Synthetic large-database monitoring benchmark
+        if: always()
         run: python tests/perf_monitor.py
