@@ -13,3 +13,11 @@ aside nav{max-height:none}@media(max-width:700px){aside nav{display:block;flex:a
 #submission-selection-status { margin: 12px 0; }
 #json-upload input[type=file] { min-width: 250px; max-width: 100%; }
 #go-batches { margin-top: 8px; }
+
+/* V1.4 launch confirmation: status warnings and a scrollable exact roster */
+.roster-outdated {color:#9a6400;font-weight:600;font-size:12px}
+.roster-warning {background:#fff3ce;color:#835900;border:1px solid #efd37a;border-radius:6px;padding:12px;margin:12px 0}
+#official-start-summary table {width:100%}
+#official-start-summary h3 {margin:16px 0 8px}
+#official-start-dialog {max-width:960px;max-height:85vh;overflow-y:auto}
+#official-start-summary {overflow-x:auto}
