@@ -6,7 +6,11 @@ import unicodedata
 from app.services.competition import analytics
 
 DIMENSIONS=[('L2_main','L2 主问题'),('L3_main','L3 主问题'),('L1_sub','L1 子问题'),('L2_sub','L2 子问题')]
-COLORS=['#235d91','#d97732','#24856d','#8256a3']
+# Team colors: calm, distinguishable (also for color-blind readers), reused by the web page.
+TEAM_COLORS=['#2f6fa8','#e08a3c','#3a9d7a','#8e6bbf','#d0586a','#6b7f95']
+# Dimension colors: one blue family, darker for main questions, lighter for sub-questions.
+DIM_COLORS=['#1f5a8f','#4a8cc2','#7fb3dc','#b4d4ee']
+def team_color(i):return TEAM_COLORS[i%len(TEAM_COLORS)]
 CHARTS={'ranking':'综合分排行榜','dimensions':'四维准确率对比','radar':'能力雷达图','efficiency':'推理效率分析'}
 
 
@@ -57,32 +61,44 @@ def chart_svg(group,chart):
             y=118+i*step;s.label(30,y+14,f'{row["rank"]}. {row["name"]}')
             if chart=='ranking':
                 score=row['weighted_score']
-                s.parts.append(f'<rect x="{x}" y="{y}" width="{w*score/100:.4f}" height="28" fill="{COLORS[0]}"/>')
+                s.parts.append(f'<rect x="{x}" y="{y}" width="{w*score/100:.4f}" height="28" fill="{team_color(i)}"/>')
                 s.text(x+w*score/100+7,y+20,number(score),12)
             else:
                 for j,(key,label) in enumerate(DIMENSIONS):
                     yy=y+j*25;v=row['dimensions'][key]['accuracy']
                     s.text(x-8,yy+13,label,11,anchor='end')
-                    if v is not None:s.parts.append(f'<rect x="{x}" y="{yy}" width="{w*v:.4f}" height="17" fill="{COLORS[j]}"/>')
+                    if v is not None:s.parts.append(f'<rect x="{x}" y="{yy}" width="{w*v:.4f}" height="17" fill="{DIM_COLORS[j]}"/>')
                     s.text(x+w*(v or 0)+6,yy+13,'缺失' if v is None else number(v*100)+'%',11)
         return s.finish()
     if chart=='radar':
-        s=SVG(CHARTS[chart],675,subtitle+' · 展示当前筛选中排名前两支队伍')
-        cx,cy,radius=500,300,165
-        for tick in (.2,.4,.6,.8,1):
-            pts=[(cx,cy-radius*tick),(cx+radius*tick,cy),(cx,cy+radius*tick),(cx-radius*tick,cy)]
+        shown=rows[:4]
+        s=SVG(CHARTS[chart],560,subtitle+f' · 展示当前筛选中排名前 {len(shown)} 支队伍')
+        cx,cy,radius=330,310,185
+        complete=[[row['dimensions'][key]['accuracy'] for key,_ in DIMENSIONS] for row in shown]
+        known=[v for vals in complete for v in vals if v is not None]
+        # Zoom the axis to the data so close teams stay readable; the center value is printed on the chart.
+        low=max(0,int((min(known)*100-10)//10)*10) if known else 0
+        def scale(v):return radius*max(0,(v*100-low))/(100-low)
+        for tick in range(4):
+            value=low+(100-low)*(tick+1)/4;t=(tick+1)/4
+            pts=[(cx,cy-radius*t),(cx+radius*t,cy),(cx,cy+radius*t),(cx-radius*t,cy)]
             s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in pts)+'" fill="none" stroke="#dbe3ec"/>')
-            s.text(cx+5,cy-radius*tick,round(tick*100),10)
-        positions=[(cx,cy-radius-20),(cx+radius+30,cy),(cx,cy+radius+30),(cx-radius-35,cy)]
-        for (_,label),(x,y) in zip(DIMENSIONS,positions):s.text(x,y,label,14,anchor='middle')
-        for index,row in enumerate(rows[:2]):
-            vals=[row['dimensions'][key]['accuracy'] for key,_ in DIMENSIONS]
-            color=COLORS[index]
-            s.label(40,530+index*60,row['name']+' · '+', '.join('缺失' if v is None else number(v*100)+'%' for v in vals),140,color)
+            s.text(cx+5,cy-radius*t-3,f'{value:.0f}%',10,'#7b8ca3')
+        s.text(cx+5,cy+14,f'中心 {low}%',10,'#7b8ca3')
+        for x1,y1 in [(cx,cy-radius),(cx+radius,cy),(cx,cy+radius),(cx-radius,cy)]:s.line(cx,cy,x1,y1)
+        positions=[(cx,cy-radius-16),(cx+radius+14,cy+5),(cx,cy+radius+28),(cx-radius-14,cy+5)]
+        anchors=['middle','start','middle','end']
+        for (_,label),(x,y),anchor in zip(DIMENSIONS,positions,anchors):s.text(x,y,label,14,anchor=anchor)
+        for index,row in enumerate(shown):
+            vals=complete[index];color=team_color(index);y0=130+index*100
+            s.parts.append(f'<rect x="690" y="{y0-12}" width="12" height="12" rx="3" fill="{color}"/>')
+            s.text(710,y0,row['name'],15)
+            s.text(710,y0+22,'  ·  '.join(f'{label[:4]} '+('缺失' if v is None else number(v*100)+'%') for (_,label),v in zip(DIMENSIONS,vals)),12,'#61748b')
             if any(v is None for v in vals):
-                s.text(40,665,'缺失维度不补零；对应队伍不绘制完整雷达多边形。',12);continue
-            points=[(cx,cy-radius*vals[0]),(cx+radius*vals[1],cy),(cx,cy+radius*vals[2]),(cx-radius*vals[3],cy)]
-            s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in points)+f'" fill="{color}" fill-opacity="0.08" stroke="{color}" stroke-width="2"'+(' stroke-dasharray="6 3"' if index else '')+'/>')
+                s.text(710,y0+40,'缺失维度不补零，不绘制该队多边形',11,'#9a6400');continue
+            points=[(cx,cy-scale(vals[0])),(cx+scale(vals[1]),cy),(cx,cy+scale(vals[2])),(cx-scale(vals[3]),cy)]
+            s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in points)+f'" fill="{color}" fill-opacity="0.12" stroke="{color}" stroke-width="2.5" stroke-linejoin="round"/>')
+            for x,y in points:s.parts.append(f'<circle cx="{x}" cy="{y}" r="4" fill="{color}" stroke="white" stroke-width="1.5"/>')
         return s.finish()
     s=SVG(CHARTS[chart],540+len(rows)*60,subtitle)
     x,y,w,h=110,105,880,360
@@ -98,7 +114,7 @@ def chart_svg(group,chart):
         xx=x+w*row['mean_question_seconds']/maximum;yy=y+h-h*row['weighted_score']/100
         radius=5+min(row['mean_calls'],10)*2
         tip=f'{row["name"]}；得分 {number(row["weighted_score"])}；单题 {number(row["mean_question_seconds"],4)} 秒；平均调用 {number(row["mean_calls"])} 次'
-        s.parts.append(f'<circle cx="{xx}" cy="{yy}" r="{radius}" fill="{COLORS[0]}" fill-opacity="0.3" stroke="{COLORS[0]}"><title>{esc(tip)}</title></circle>')
+        s.parts.append(f'<circle cx="{xx}" cy="{yy}" r="{radius}" fill="{team_color(i-1)}" fill-opacity="0.35" stroke="{team_color(i-1)}" stroke-width="2"><title>{esc(tip)}</title></circle>')
         offsets=[(radius+5,-10),(radius+5,22),(-radius-22,-10),(-radius-22,22),(0,-35),(0,45),(35,-30),(-40,40),(55,10)]
         for dx,dy in offsets:
             tx,ty=xx+dx,yy+dy;box=(tx,ty-13,tx+max(12,len(str(i))*8),ty+3)

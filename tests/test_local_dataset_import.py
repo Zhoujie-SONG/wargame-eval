@@ -185,3 +185,24 @@ def test_organizer_full_dataset_in_isolated_database(client):
         q = stored[raw['id']]
         assert q['input_text'] == raw['model_input'] and q['gt_answer'] == raw['answer']['labels']
         assert q['replay_id'] == raw['replay']['id'] and q['image_step'] == raw['replay']['step']
+
+
+def test_manual_upload_import_matches_workspace_import(local_dataset):
+    client, folder, rows = local_dataset
+    files = [('images', ('images/' + p.name, p.read_bytes(), 'image/png')) for p in sorted(folder.glob('*.png'))]
+    files.append(('images', ('images/.DS_Store', b'junk', 'application/octet-stream')))
+    response = client.post('/api/dataset/import-upload', files=files + [('qa', ('qa_all.json', (folder / 'qa_all.json').read_bytes()))])
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data['total'] == 4 and data['mapped_frames'] == 2 and data['changed'] is True
+    again = client.post('/api/dataset/import-upload', files=files + [('qa', ('qa_all.json', (folder / 'qa_all.json').read_bytes()))])
+    assert again.json()['changed'] is False
+    stats = client.get('/api/dataset/stats').json()
+    assert stats['missing_image_questions'] == 0
+
+
+def test_manual_upload_rejects_folder_without_images(local_dataset):
+    client, folder, _ = local_dataset
+    response = client.post('/api/dataset/import-upload', files=[
+        ('images', ('images/readme.txt', b'x', 'text/plain')), ('qa', ('qa_all.json', (folder / 'qa_all.json').read_bytes()))])
+    assert response.status_code == 400 and '没有' in response.json()['detail']

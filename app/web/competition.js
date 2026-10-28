@@ -6,6 +6,12 @@ const dims=['L2_main','L3_main','L1_sub','L2_sub'];
 const charts={ranking:'综合分排行榜',dimensions:'四维准确率对比',radar:'能力雷达图',efficiency:'推理效率分析'};
 cs.progressRevision=0;cs.progressPolling=false;cs.listPolling=false;cs.batchRunning=false;
 const fmt=n=>Number(n||0).toLocaleString('en-US');
+const TEAM_COLORS=['#2f6fa8','#e08a3c','#3a9d7a','#8e6bbf','#d0586a','#6b7f95'];
+const DIM_NAMES={L2_main:'L2 主',L3_main:'L3 主',L1_sub:'L1 子',L2_sub:'L2 子'};
+const pct1=v=>v===null||v===undefined?'—':(v*100).toFixed(1)+'%';
+const teamIdx=runs=>Object.fromEntries([...new Set(runs.map(r=>String(r.team_id)))].sort().map((id,i)=>[id,i%6]));
+const bar=(cls,value,max)=>'<progress class="'+cls+'" max="'+(max||1)+'" value="'+(value||0)+'"></progress>';
+const kpi=(label,value,note,extra='')=>'<div class="kpi"><small>'+e(label)+'</small><strong>'+e(value)+'</strong><em>'+e(note)+'</em>'+extra+'</div>';
 function badge(status){const l=statusLabel(status);return '<span class="status status-'+l.cls+'">'+e(l.text)+'</span>'}
 function fmtDuration(sec){const m=Math.round((sec||0)/60);if(m<1)return '不足 1 分钟';const h=Math.floor(m/60);return h?h+' 小时 '+(m%60)+' 分':m+' 分钟'}
 const MODE_NAMES={single_pass:'Single-pass · 单次推理',self_refine:'Self-refine · 多轮检查修正',majority_vote:'Majority-vote · 独立采样投票'};
@@ -106,25 +112,75 @@ function renderExceptions(b,runs){const panel=$('#exception-panel'),box=$('#exce
    if(!['queued','running','stopping'].includes(r.status))acts.push('<button class="secondary" data-run="'+e(r.run_id)+'">标记平台故障…</button>');
    return [e(r.name)+' / '+e(r.submission_version),badge(r.status),acts.join('')||'—']});
  box.innerHTML=(b.status==='running'?'<p><button class="danger" data-flow-stop-batch="'+e(b.batch_id)+'">停止整个批次</button></p>':'')+table(['队伍','状态','操作'],rows);
- panel.hidden=false;if(runs.some(r=>RED_STATES.includes(r.status)))panel.open=true}
+ panel.hidden=false;const red=runs.filter(r=>RED_STATES.includes(r.status)).length,tag=$('#exception-tag');if(tag){tag.textContent=red?red+' 项需处理':'';tag.className='tag'+(red?' tag-bad':'')}if(red)panel.open=true}
 async function showBatch(id){cs.batchId=id;const rev=++cs.progressRevision;const b=await api('/evaluation-batches/'+id+'/progress');if(cs.batchId!==id||rev!==cs.progressRevision)return;
  const node=$('#batch-progress'),running=b.status==='running';cs.batchRunning=running;node.hidden=false;
  const pct=b.total?b.completed/b.total*100:0,planned=b.plan&&b.plan.max_requests;
- const remain=!running?'':b.completed>=20?'预计剩余 '+fmtDuration((b.total-b.completed)*b.elapsed_seconds/b.completed)+' · ':'预计剩余 计算中 · ';
  const runs=[...(b.runs||[])].sort((x,y)=>runRank(x)-runRank(y)||String(x.team_id).localeCompare(String(y.team_id)));
+ const idx=teamIdx(runs),partial=running||runs.some(r=>r.completed<r.total);
+ const answered=runs.reduce((n,r)=>n+r.completed,0),right=runs.reduce((n,r)=>n+Object.values(r.dimensions||{}).reduce((m,d)=>m+d.correct,0),0);
+ const errors=runs.reduce((n,r)=>n+(r.error_count||0),0);
+ const remain=b.completed>=20?fmtDuration((b.total-b.completed)*b.elapsed_seconds/b.completed):'计算中';
+ const rows=runs.map(r=>{const c='tc'+(idx[String(r.team_id)]||0),dimsHtml=dims.map(k=>{const d=(r.dimensions||{})[k]||{completed:0,correct:0};
+    const v=d.answered_accuracy===undefined?(d.completed?d.correct/d.completed:null):d.answered_accuracy;
+    return '<span class="muted">'+DIM_NAMES[k]+'</span>'+bar(c+' mini',v||0,1)+'<span class="num">'+pct1(v)+' <span class="muted">('+fmt(d.completed)+' 题)</span></span>'}).join('');
+   const done=Object.values(r.dimensions||{}).reduce((m,d)=>m+d.correct,0),acc=r.answered_accuracy===undefined?(r.completed?done/r.completed:null):r.answered_accuracy;
+   return ['<b>'+e(r.name)+'</b> <span class="muted">/ '+e(r.submission_version)+'</span><br><span class="muted small">'+e(r.model.model_id)+'</span>',
+     bar(c,r.completed,r.total)+'<span class="num muted small">'+fmt(r.completed)+' / '+fmt(r.total)+' · '+(r.total?Math.round(r.completed/r.total*100):0)+'%</span>',
+     '<div class="big-acc">'+pct1(r.completed?acc:null)+'</div><span class="muted small">已答 '+fmt(r.completed)+' 题中答对 '+fmt(done)+'</span>',
+     '<div class="mini-grid">'+dimsHtml+'</div>',e(errorText(r)),badge(r.status),'<button data-run="'+e(r.run_id)+'">逐题详情</button>']});
  node.innerHTML='<h2>'+e(b.name)+' '+badge(b.status)+'</h2><p class="tag">'+e(modeLabel(b.plan.official))+'</p>'
-  +'<div class="overall"><progress max="'+(b.total||1)+'" value="'+(b.completed||0)+'"></progress><span>'+pct.toFixed(1)+'% · '+remain+'请求 '+fmt(b.actual_calls)+(planned?' / '+fmt(planned):'')+' · 已用 '+fmtDuration(b.elapsed_seconds)+'</span></div>'
-  +table(['队伍 / 版本','模型','进度','状态','错误','操作'],runs.map(r=>[e(r.name)+' / '+e(r.submission_version),e(r.model.model_id),
-     '<progress max="'+(r.total||1)+'" value="'+r.completed+'"></progress>'+fmt(r.completed)+' / '+fmt(r.total),badge(r.status),e(errorText(r)),
-     '<button data-run="'+e(r.run_id)+'">逐题详情</button>']));
+  +'<div class="kpis">'+kpi('整体进度',pct.toFixed(1)+'%',fmt(b.completed)+' / '+fmt(b.total)+' 题',bar('overall-bar',b.completed,b.total))
+  +(running?kpi('预计剩余',remain,b.completed>=20?'按本批次平均速度估算':'已完成 20 题后给出估算'):kpi('未完成题数',fmt(b.total-b.completed),'本批次尚未全部完成'))
+  +kpi(partial?'已答题平均准确率':'平均准确率',pct1(answered?right/answered:null),partial?'仅统计已答题，非最终成绩':'全部题目')
+  +kpi('请求 / 错误',fmt(b.actual_calls)+' / '+fmt(errors),(planned?'计划 '+fmt(planned)+' 次 · ':'')+'错误率 '+(b.actual_calls?(errors/b.actual_calls*100).toFixed(2):'0.00')+'%')
+  +kpi('已用时间',fmtDuration(b.elapsed_seconds),running?'进行中':'已停止计时')+'</div>'
+  +'<h3>'+(partial?'各队实时进度 <span class="tag tag-warn">暂估</span>':'各队成绩')+'</h3>'
+  +(partial?'<p class="sub">准确率 ＝ 已答对 ÷ <b>已答题数</b>（不是全部题数）。每队答完全部题目之前仅供观察，最终成绩以全部题目为准。</p>':'')
+  +table(['队伍 / 模型','进度','当前准确率（已答）','分维度（已答题数）','异常','状态','操作'],rows);
  renderExceptions(b,runs);
- const results=$('#results-view');if(results)results.hidden=running}
+ const results=$('#results-view');if(results)results.hidden=running;
+ const curve=$('#curve-panel');if(curve&&!partial)curve.hidden=true;
+ if(partial)loadCurves(id,idx,runs[0]?runs[0].total:0).catch(()=>{})}
+async function loadCurves(id,idx,total,force=false){const panel=$('#curve-panel');if(!panel)return;
+ if(!force&&cs.curveId===id&&Date.now()-(cs.curveAt||0)<15000)return;cs.curveId=id;cs.curveAt=Date.now();
+ const data=await api('/evaluation-batches/'+id+'/accuracy-curves');if(cs.batchId!==id)return;
+ const series=(data||[]).filter(d=>d.curve&&d.curve.length);if(!series.length){panel.hidden=true;return}
+ const color=d=>TEAM_COLORS[idx[String(d.team_id)]||0];
+ panel.hidden=false;panel.innerHTML='<h2>准确率随已答题数变化</h2><p class="sub">曲线越平稳，当前准确率越可信；已答题数少时（左侧）波动大属正常。</p><div class="legend">'+series.map(d=>'<span><i class="sw" data-c="'+e(color(d))+'"></i>'+e(d.name)+'</span>').join('')+'</div>'+curveSvg(series,color,total);
+ panel.querySelectorAll('.sw[data-c]').forEach(n=>{n.className='sw tc'+TEAM_COLORS.indexOf(n.dataset.c)})}
+function curveSvg(series,color,total){const W=1000,H=250,L=46,R=12,T=10,B=30;const max=Math.max(total||0,...series.map(d=>d.curve[d.curve.length-1][0]),1);
+ const vals=series.flatMap(d=>d.curve.filter(p=>p[0]>=20).map(p=>p[1]));const all=vals.length?vals:series.flatMap(d=>d.curve.map(p=>p[1]));
+ let lo=Math.max(0,Math.floor((Math.min(...all)-.05)*20)/20),hi=Math.min(1,Math.ceil((Math.max(...all)+.05)*20)/20);if(hi-lo<.2){hi=Math.min(1,lo+.2);lo=Math.max(0,hi-.2)}
+ const x=i=>L+(W-L-R)*i/max,y=v=>T+(H-T-B)*(1-(Math.min(hi,Math.max(lo,v))-lo)/(hi-lo));
+ let g='';for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v).toFixed(1)+'" y2="'+y(v).toFixed(1)+'" stroke="#e5ebf2"/><text x="'+(L-8)+'" y="'+(y(v)+4).toFixed(1)+'" font-size="11" fill="#7b8ca3" text-anchor="end">'+Math.round(v*100)+'%</text>'}
+ for(let k=0;k<=4;k++){const v=Math.round(max*k/4);g+='<text x="'+x(v).toFixed(1)+'" y="'+(H-8)+'" font-size="11" fill="#7b8ca3" text-anchor="middle">'+fmt(v)+'</text>'}
+ for(const d of series){const c=color(d),pts=d.curve.map((p,k)=>(k?'L':'M')+x(p[0]).toFixed(1)+','+y(p[1]).toFixed(1)).join(' '),last=d.curve[d.curve.length-1];
+  g+='<path d="'+pts+'" fill="none" stroke="'+c+'" stroke-width="2" stroke-linejoin="round"/><circle cx="'+x(last[0]).toFixed(1)+'" cy="'+y(last[1]).toFixed(1)+'" r="4" fill="'+c+'"/>'}
+ return '<svg class="curve-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="各队准确率随已答题数变化">'+g+'</svg>'}
 function analysisQuery(){const p=new URLSearchParams({top:$('#analytics-top').value});document.querySelectorAll('[data-analysis-team]:checked').forEach(n=>p.append('team_id',n.dataset.analysisTeam));return p}
-async function loadAnalytics(rebuild=false){const id=$('#analytics-batch').value,revision=++cs.analysisRevision;if(!id){$('#competition-groups').innerHTML='<p>请先创建测评批次。</p>';return}if(rebuild){const batch=await api('/evaluation-batches/'+id);if(revision!==cs.analysisRevision||id!==$('#analytics-batch').value)return;$('#analytics-teams').innerHTML='<p>勾选队伍比较；雷达图展示所选范围中排名前两队。</p>'+batch.runs.map(r=>`<label class="inline"><input type="checkbox" data-analysis-team="${e(r.team_id)}" checked>${e(r.name)}</label>`).join('')}
+async function loadAnalytics(rebuild=false){const id=$('#analytics-batch').value,revision=++cs.analysisRevision;if(!id){$('#competition-groups').innerHTML='<p>请先创建测评批次。</p>';return}if(rebuild){const batch=await api('/evaluation-batches/'+id);if(revision!==cs.analysisRevision||id!==$('#analytics-batch').value)return;$('#analytics-teams').innerHTML='<p>勾选队伍比较；雷达图展示所选范围中排名前四队。</p>'+batch.runs.map(r=>`<label class="inline"><input type="checkbox" data-analysis-team="${e(r.team_id)}" checked>${e(r.name)}</label>`).join('')}
  const checked=[...document.querySelectorAll('[data-analysis-team]:checked')];if(!checked.length){$('#competition-groups').textContent='请至少选择一支队伍';$('#competition-exports').innerHTML='';return}
- const params=analysisQuery(),data=await api('/evaluation-batches/'+id+'/analytics?'+params);if(revision!==cs.analysisRevision||id!==$('#analytics-batch').value)return;const exportParams=new URLSearchParams(params);exportParams.set('audience',$('#analytics-audience').value);$('#competition-exports').innerHTML=['html','csv','xlsx','json'].map(f=>`<a download href="/api/evaluation-batches/${e(id)}/export?${e(exportParams.toString())}&amp;format=${f}">导出 ${f==='html'?'综合 HTML 报告':f.toUpperCase()}</a>`).join('　')+`　<a target="_blank" rel="noopener" href="/api/evaluation-batches/${e(id)}/export?${e(exportParams.toString())}&amp;format=html&amp;download=false">打开报告预览</a>`;
- $('#competition-summary').innerHTML='<p class="tag">'+e(modeLabel(data.official))+'</p><div class="cards">'+[['整批队伍',data.teams],['完成队伍',data.finished],['已完成 QA',data.qa_completed+' / '+data.qa_total],['实际请求',data.actual_calls]].map(([l,v])=>`<div class="card"><span>${e(l)}</span><strong>${e(v)}</strong></div>`).join('')+'</div><p>'+e(data.scope_note)+'</p>';
- $('#competition-groups').innerHTML=data.groups.map(g=>'<div class="panel"><h2>'+e(g.kind+' · '+g.mode)+' <span class="tag">'+modeLabel(g.kind==='official')+'</span></h2><p>比较组 '+e(g.id)+' · 每题最多 '+g.calls+' 次 · 提前结束 '+g.early_stop+'</p>'+table(['排名','队伍','模型','L2主','L3主','L1子','L2子','综合分','平均秒/题','详情'],g.entries.map(r=>[r.rank,e(r.name),e(r.model.model_id),...dims.map(k=>percent(r.dimensions[k].accuracy)),r.weighted_score.toFixed(3),r.mean_question_seconds===null?'—':r.mean_question_seconds.toFixed(4),`<button data-run="${e(r.run_id)}">查看</button>`]))+Object.entries(charts).map(([chart,title])=>{const q=new URLSearchParams(params);q.set('group',g.id);const src='/api/evaluation-batches/'+id+'/charts/'+chart+'.svg?'+q;return `<div class="chart-panel"><h3>${e(title)}</h3><div class="row"><a download href="${e(src)}">导出 SVG</a><button data-png="${e(src)}" data-chart-name="${e(chart)}">导出 PNG</button></div><img class="competition-chart" src="${e(src)}" alt="${e(title+' · '+g.kind)}"></div>`}).join('')+'</div>').join('')+(data.groups.length?'':'<div class="panel">暂无完整可排名成绩。未完成队伍不进入最终排名。</div>')+(data.excluded.length?'<div class="panel"><h3>未进入最终排名</h3>'+data.excluded.map(x=>'<p>'+e(x.name+' · '+x.status+' · '+x.reason)+'</p>').join('')+'</div>':'');}
+ const params=analysisQuery(),data=await api('/evaluation-batches/'+id+'/analytics?'+params);if(revision!==cs.analysisRevision||id!==$('#analytics-batch').value)return;
+ const exportParams=new URLSearchParams(params);exportParams.set('audience',$('#analytics-audience').value);const qs=e(exportParams.toString());
+ $('#competition-exports').innerHTML=[['html','导出综合 HTML 报告'],['xlsx','导出 Excel'],['csv','导出 CSV'],['json','导出 JSON']].map(([f,l])=>`<a class="btn o" download href="/api/evaluation-batches/${e(id)}/export?${qs}&amp;format=${f}">${l}</a>`).join('')+`<a class="btn o" target="_blank" rel="noopener" href="/api/evaluation-batches/${e(id)}/export?${qs}&amp;format=html&amp;download=false">打开报告预览</a>`;
+ $('#competition-summary').innerHTML='<p class="result-note">'+e(modeLabel(data.official))+' · 完成队伍 '+data.finished+' / '+data.teams+' · 已完成 QA '+fmt(data.qa_completed)+' / '+fmt(data.qa_total)+' · 实际请求 '+fmt(data.actual_calls)+'。'+e(data.scope_note)+'</p>';
+ $('#competition-groups').innerHTML=data.groups.map(g=>renderGroup(g,id,params)).join('')+(data.groups.length?'':'<div class="panel">暂无完整可排名成绩。未完成队伍不进入最终排名。</div>')+(data.excluded.length?'<div class="panel"><h3>未进入最终排名</h3>'+data.excluded.map(x=>'<p>'+e(x.name+' · '+x.status+' · '+x.reason)+'</p>').join('')+'</div>':'');}
+function chartPanel(id,g,params,chart){const q=new URLSearchParams(params);q.set('group',g.id);const src='/api/evaluation-batches/'+id+'/charts/'+chart+'.svg?'+q,title=charts[chart];
+ return '<div class="panel chart-card"><div class="chart-head"><h3>'+e(title)+'</h3><span class="row"><a download href="'+e(src)+'">导出 SVG</a><button class="secondary" data-png="'+e(src)+'" data-chart-name="'+e(chart)+'">导出 PNG</button></span></div><img class="competition-chart" src="'+e(src)+'" alt="'+e(title+' · '+g.kind)+'"></div>'}
+function renderGroup(g,id,params){
+ const cells=g.entries.flatMap(r=>dims.map(k=>r.dimensions[k].accuracy)).filter(v=>v!==null),lo=Math.min(...cells),hi=Math.max(...cells);
+ const heat=v=>v===null?'heat-na':'heat-'+(hi>lo?Math.min(5,Math.floor((v-lo)/(hi-lo)*6)):3),medal=['🥇','🥈','🥉'];
+ const podium=g.entries.slice(0,3).map((r,i)=>'<div class="podium pc'+i+'"><small>第 '+(i+1)+' 名</small><strong>'+e(r.name)+'</strong><span class="score">'+r.weighted_score.toFixed(2)+'</span><em>综合分 · '+e(r.model.model_id)+'</em></div>').join('');
+ const rows=g.entries.map((r,i)=>[String(r.rank)+(medal[i]?' '+medal[i]:''),'<i class="sw tc'+(i%6)+'"></i><b>'+e(r.name)+'</b><br><span class="muted small">'+e(r.model.model_id)+'</span>',
+   bar('tc'+(i%6),r.weighted_score,100)+'<b class="num">'+r.weighted_score.toFixed(2)+'</b>',
+   ...dims.map(k=>'<div class="heat '+heat(r.dimensions[k].accuracy)+'">'+pct1(r.dimensions[k].accuracy)+'</div>'),
+   r.mean_question_seconds===null?'—':r.mean_question_seconds.toFixed(1)+' 秒',r.mean_calls===null||r.mean_calls===undefined?'—':r.mean_calls.toFixed(1),`<button data-run="${e(r.run_id)}">查看</button>`]);
+ return '<div class="podiums">'+podium+'</div>'
+  +'<div class="panel"><h2>综合排名与四维准确率</h2><p class="sub">综合分 ＝ 100 × (0.35·L2主 ＋ 0.35·L3主 ＋ 0.15·L1子 ＋ 0.15·L2子)；颜色越深准确率越高。'+e(g.kind+' · '+g.mode)+' · 每题最多 '+g.calls+' 次 · 提前结束 '+g.early_stop+' · 比较组 '+e(g.id)+'</p>'
+  +table(['排名','队伍 / 模型','综合分','L2 主','L3 主','L1 子','L2 子','平均耗时','平均调用','详情'],rows)+'</div>'
+  +'<div class="charts">'+chartPanel(id,g,params,'radar')+chartPanel(id,g,params,'efficiency')+'</div>'
+  +'<details class="fold"><summary><span class="chev" aria-hidden="true"></span><b>更多图表</b><span class="hint">综合分排行榜、四维准确率对比</span></summary><div class="fold-body">'+chartPanel(id,g,params,'ranking')+chartPanel(id,g,params,'dimensions')+'</div></details>'}
 async function pngExport(url,name){const response=await fetch(url);if(!response.ok)throw Error('图表加载失败');const svg=await response.text(),blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'}),src=URL.createObjectURL(blob);try{const image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(Error('PNG 转换失败'));image.src=src});const canvas=document.createElement('canvas'),scale=Math.min(2,Math.sqrt(16000000/(image.naturalWidth*image.naturalHeight)),32000/image.naturalHeight);canvas.width=image.naturalWidth*scale;canvas.height=image.naturalHeight*scale;const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.drawImage(image,0,0);const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!png)throw Error('PNG 生成失败');const link=document.createElement('a'),file=URL.createObjectURL(png);link.href=file;link.download=name+'.png';link.click();setTimeout(()=>URL.revokeObjectURL(file),1000)}finally{URL.revokeObjectURL(src)}}
 $('#json-upload').onsubmit=action(async()=>{
  const formData=new FormData($('#json-upload'));

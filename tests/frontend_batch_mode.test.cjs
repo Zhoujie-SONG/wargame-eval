@@ -46,7 +46,7 @@ function setup(storage=new Map()){
   vm.createContext(context);
   const app=fs.readFileSync('app/web/app.js','utf8');
   vm.runInContext(app.slice(app.indexOf('function populateCalls('),app.indexOf('function selectPrompt(')),context);
-  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadSubmissions,restoreLatestRoster,loadAnalytics,cs,showBatch,renderLaunchSummary,selectionNotice,fmtDuration};})();');
+  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={renderGroup,curveSvg,loadCurves,batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadSubmissions,restoreLatestRoster,loadAnalytics,cs,showBatch,renderLaunchSummary,selectionNotice,fmtDuration};})();');
   vm.runInContext(source,context);
   return {context,fields,$,a:context.testAPI,storage,listeners,timers};
 }
@@ -63,7 +63,7 @@ test('sidebar navigation opens every page at the top without an anchor jump, inc
     history:{pushState:(_,__,url)=>{hash=url}},window:{scrollTo:({top})=>{scrollY=top}},
     document:{querySelectorAll:s=>s==='.page'?pages:[],dispatchEvent:ev=>events.push(ev.detail)},
     CustomEvent:class{constructor(type,init){this.detail=init.detail}},
-    loadRuns:async()=>{},board:async()=>{},stats:async()=>{},search:async()=>{},loadImages:async()=>{}};
+    loadRuns:async()=>{},board:async()=>{},stats:async()=>{},search:async()=>{},loadImages:async()=>{},workspaceCheck:async()=>{}};
   vm.createContext(context);
   const app=fs.readFileSync('app/web/app.js','utf8');
   vm.runInContext(app.slice(app.indexOf('async function switchTab('),app.indexOf("document.querySelectorAll('nav button').forEach(b=>")),context);
@@ -207,10 +207,13 @@ test('polling checks selected batch every 3 seconds and historical batch list ev
     throw Error('unexpected '+url);
   };
   assert.deepEqual(timers.map(t=>t.ms),[3000,15000]);
+  const core=()=>requests.filter(u=>!u.endsWith('/accuracy-curves'));
   await timers[0].fn();
-  assert.deepEqual(requests,['/evaluation-batches/active-batch/progress']);
+  assert.deepEqual(core(),['/evaluation-batches/active-batch/progress']);
   await timers[1].fn();
-  assert.deepEqual(requests,['/evaluation-batches/active-batch/progress','/evaluation-batches']);
+  assert.deepEqual(core(),['/evaluation-batches/active-batch/progress','/evaluation-batches']);
+  await timers[0].fn();                                    // curves are fetched at most once per 15 seconds
+  assert.equal(requests.filter(u=>u.endsWith('/accuracy-curves')).length,1);
 });
 
 
@@ -286,17 +289,44 @@ test('monitor page: red teams first, error breakdown, remaining time, results hi
                                           run('Wait','queued',0),run('Bad','interrupted',200)]);
   await a.showBatch('b');
   const html=$('#batch-progress').innerHTML;
-  const at=n=>html.indexOf('"'+n+' / v1');
+  const at=n=>html.indexOf('<b>'+n+'</b>');
   assert.ok(at('Bad')<at('Run')&&at('Run')<at('Wait')&&at('Wait')<at('Done'));          // red → running → queued → completed
-  assert.match(html,/3（接口 2 \/ 超时 1）/);assert.match(html,/预计剩余 6 小时 32 分/);        // (2558-600) × 7200 ÷ 600 = 23,496 s
+  assert.match(html,/3（接口 2 \/ 超时 1）/);assert.match(html,/预计剩余<\/small><strong>6 小时 32 分/);        // (2558-600) × 7200 ÷ 600 = 23,496 s
   assert.equal($('#results-view').hidden,true);assert.equal(a.cs.batchRunning,true);
   assert.match($('#exception-actions').innerHTML,/data-flow-stop-batch/);assert.match($('#exception-actions').innerHTML,/data-flow-rerun=\\?"Bad/);
   assert.match($('#exception-actions').innerHTML,/data-flow-stop=\\?"Run/);assert.equal($('#exception-panel').open,true);
   context.api=async()=>batch('running',[run('Run','running',3)],{completed:3,total:2558,elapsed_seconds:60});
-  await a.showBatch('b');assert.match($('#batch-progress').innerHTML,/预计剩余 计算中/);   // fewer than 20 done
+  await a.showBatch('b');assert.match($('#batch-progress').innerHTML,/预计剩余<\/small><strong>计算中/);   // fewer than 20 done
   context.api=async()=>batch('completed',[run('Done','completed',1279)],{completed:2558});
   await a.showBatch('b');
   assert.equal($('#results-view').hidden,false);assert.equal(a.cs.batchRunning,false);assert.doesNotMatch($('#batch-progress').innerHTML,/预计剩余/);
+});
+
+test('monitor shows accuracy over answered questions, marks it provisional, and fetches the curves',async()=>{
+  const {context,a,$}=setup();
+  const dimsOf=(c,n)=>({L2_main:{completed:n,correct:c,total:320,answered_accuracy:n?c/n:null},L3_main:{completed:0,correct:0,total:320,answered_accuracy:null},L1_sub:{completed:0,correct:0,total:320,answered_accuracy:null},L2_sub:{completed:0,correct:0,total:319,answered_accuracy:null}});
+  const run=(name,done,right)=>({run_id:name,team_id:name,name,submission_version:'v1',model:{model_id:'M'},status:'running',completed:done,total:1279,error_count:0,dimensions:dimsOf(right,done),answered_accuracy:done?right/done:null});
+  const calls=[];
+  context.api=async(url)=>{calls.push(url);
+    if(url.endsWith('/accuracy-curves'))return [{run_id:'A',team_id:'A',name:'A',completed:200,curve:[[20,.5],[100,.62],[200,.66]]}];
+    return {batch_id:'b',name:'正式',status:'running',plan:{official:true},teams:2,completed:300,total:2558,actual_calls:900,elapsed_seconds:600,error_count:0,runs:[run('A',200,132),run('B',100,40)]}};
+  await a.showBatch('b');
+  const html=$('#batch-progress').innerHTML;
+  assert.match(html,/66\.0%/);assert.match(html,/已答 200 题中答对 132/);                 // 132 / 200, not 132 / 1279
+  assert.match(html,/40\.0%/);assert.match(html,/已答题平均准确率<\/small><strong>57\.3%/);  // (132+40) / 300
+  assert.match(html,/暂估/);assert.match(html,/已答题数/);assert.doesNotMatch(html,/10\.3%/);  // 132 / 1279 would be 10.3%
+  await new Promise(r=>setImmediate(r));
+  assert.equal($('#curve-panel').hidden,false);assert.match($('#curve-panel').innerHTML,/<svg class=\\?"curve-chart/);
+  assert.ok(calls.includes('/evaluation-batches/b/accuracy-curves'));
+});
+
+test('results: podium, heat cells and chart panels render for a ranked group',()=>{
+  const {a}=setup();
+  const entry=(rank,name,score,acc)=>({rank,name,run_id:name,model:{model_id:'M-'+name},weighted_score:score,mean_question_seconds:12.34,mean_calls:2.5,
+    dimensions:{L2_main:{accuracy:acc},L3_main:{accuracy:acc-.02},L1_sub:{accuracy:null},L2_sub:{accuracy:acc-.1}}});
+  const html=a.renderGroup({id:'g',kind:'official',mode:'self_refine',calls:3,early_stop:false,entries:[entry(1,'A',70,.7),entry(2,'B',60,.6)]},'b',new URLSearchParams());
+  assert.match(html,/podium pc0/);assert.match(html,/70\.00/);assert.match(html,/heat-5/);assert.match(html,/heat-na/);
+  assert.match(html,/charts\/radar\.svg/);assert.match(html,/charts\/efficiency\.svg/);assert.match(html,/更多图表/);
 });
 
 test('durations are shown in hours and minutes',()=>{

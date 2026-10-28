@@ -107,6 +107,10 @@ async def start(batch_id:str,value:BatchStart|None=None):return dispatch_batch(b
 def stop(batch_id:str):return comp.stop_batch(batch_id)
 
 
+@router.get('/evaluation-batches/{batch_id}/accuracy-curves')
+def accuracy_curves(batch_id:str):return comp.accuracy_curves(batch_id)
+
+
 @router.get('/evaluation-batches/{batch_id}/leaderboard')
 def leaderboard(batch_id:str):return comp.analytics(batch_id)
 

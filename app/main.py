@@ -127,6 +127,24 @@ def import_local_dataset():
     return import_local(ROOT / 'images')
 
 
+@app.get('/api/dataset/workspace')
+def workspace_files():
+    folder = ROOT / 'images'
+    qa = folder / 'qa_all.json'
+    shots = sum(1 for p in folder.iterdir() if p.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')) if folder.is_dir() else 0
+    return {'qa_found': qa.is_file(), 'image_files': shots}
+
+
+@app.post('/api/dataset/import-upload')
+async def import_uploaded_dataset(qa: UploadFile = File(...), images: list[UploadFile] = File(...)):
+    from app.data.local_importer import import_upload
+    if len(images) > 5000:
+        raise ValueError('截图数量超过 5000 张')
+    qa_bytes = await qa.read(20_000_001)
+    files = [(f.filename or '', await f.read(20_000_001)) for f in images]
+    return await asyncio.to_thread(import_upload, qa_bytes, files)
+
+
 @app.get('/api/dataset/stats')
 def dataset_stats():
     from app.services.dataset import overview

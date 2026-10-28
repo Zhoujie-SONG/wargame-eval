@@ -248,3 +248,10 @@ def analytics(identity,team_ids=None,top=10,audience='public'):
             'elapsed_seconds':batch['elapsed_seconds'],'generated_at':now(),'groups':groups,'excluded':excluded,
             'scope_note':'顶部为整批统计；排行榜和图表仅包含筛选后完整完成且无主办方故障的队伍。不同条件分别排名。',
             'weights':{'L2_main':.35,'L3_main':.35,'L1_sub':.15,'L2_sub':.15}}
+
+
+def accuracy_curves(batch_id):
+    """Per-team running accuracy curves for the monitor page."""
+    from app.services.monitor import accuracy_curve
+    return [dict(run_id=r['run_id'],team_id=r.get('team_id'),name=r['name'],completed=r['completed'],
+                 curve=accuracy_curve(r['run_id'])) for r in get_batch(batch_id)['runs']]

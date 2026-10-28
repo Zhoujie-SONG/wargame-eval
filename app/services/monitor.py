@@ -157,3 +157,16 @@ def lightweight_report(run_id):
                         row['completed']==total and not row['infrastructure_errors'],**summary)
     value.update({k:m.get(k) for k in ('batch_id','team_id','submission_version')})
     return value
+
+
+def accuracy_curve(run_id,points=80):
+    """Cumulative accuracy after each answered question, thinned to about `points` samples."""
+    from app.db import db
+    with db() as c:
+        flags=[bool(r[0]) for r in c.execute(
+            "SELECT json_extract(body,'$.correct') FROM results WHERE run_id=? ORDER BY rowid",(run_id,))]
+    step=max(1,len(flags)//points);curve=[];right=0
+    for i,flag in enumerate(flags,1):
+        right+=flag
+        if i%step==0 or i==len(flags):curve.append([i,right/i])
+    return curve

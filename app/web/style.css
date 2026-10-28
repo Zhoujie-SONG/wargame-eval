@@ -54,3 +54,86 @@ dl.kv>div:last-child{border-bottom:none}dl.kv dt{color:#74849a}dl.kv dd{margin:0
 .empty-hint{color:#7f90a5;padding:18px 0}
 .table-scroll{overflow-x:auto}
 @media(max-width:1000px){.split{grid-template-columns:1fr}.overall{flex-wrap:wrap}.overall span{white-space:normal}}
+
+/* V1.5 visual refresh: calm team palette, folding sections, KPI cards, import options */
+:root{--line:#e2e8f0;--ink:#1f2f45;--soft:#66788f;--accent:#215d92}
+.panel,.card,.kpi,.podium{border-radius:12px;box-shadow:0 1px 2px rgba(31,47,69,.05)}
+.panel{border-color:var(--line)}
+h3{font-size:15px;margin:18px 0 8px}
+.sub{color:var(--soft);margin:0 0 14px}
+.small{font-size:12px}.num{font-variant-numeric:tabular-nums}
+.card em,.kpi em{display:block;font-style:normal;font-size:12px;color:var(--soft)}
+.card strong{font-variant-numeric:tabular-nums}
+/* tags */
+.tag-ok{background:#e5f4ee;color:#1f7a5c}.tag-warn{background:#fff4d6;color:#946100}.tag-bad{background:#fdecea;color:#a8372f}
+.fold>summary .tag{border-radius:20px;padding:2px 10px;font-weight:600}
+.fold>summary .tag:empty{display:none}
+/* import options */
+.seg{display:inline-flex;gap:4px;background:#eaf0f6;border-radius:10px;padding:4px;margin:6px 0 16px;flex-wrap:wrap}
+.seg button{background:transparent;color:#4b5f78;border:0;font-weight:600;padding:7px 18px;border-radius:7px}
+.seg button.on{background:#fff;color:var(--accent);box-shadow:0 1px 3px rgba(31,47,69,.15)}
+.checks{margin-bottom:12px}
+.check{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:#fbfcfe}
+.check-note{margin-left:auto;color:var(--soft);font-size:12px}
+.check-dot{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:700;flex:none}
+.check-dot.ok{background:#e5f4ee;color:#1f7a5c}.check-dot.bad{background:#fdecea;color:#a8372f}
+#dataset-import-result{margin:12px 0 0;color:#33465e;overflow-wrap:anywhere}
+#import-manual label{max-width:560px}
+/* folding sections */
+.fold{background:#fff;border:1px solid var(--line);border-radius:12px;margin:0 0 12px;box-shadow:0 1px 2px rgba(31,47,69,.05)}
+.fold>summary{display:flex;align-items:center;gap:12px;padding:14px 22px;cursor:pointer;list-style:none;color:var(--ink)}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary b{font-size:15px;font-weight:650}
+.fold .hint{flex:1;color:var(--soft);font-weight:400;min-width:0}
+.chev::before{content:"";display:inline-block;border:5px solid transparent;border-left:7px solid #7b8ca3;margin-right:2px;transition:transform .15s}
+.fold[open]>summary .chev::before{transform:rotate(90deg) translateX(2px)}
+.fold-body{padding:4px 24px 22px;overflow-x:auto}
+.fold .panel{box-shadow:none}
+/* progress bars: one color per team */
+progress{appearance:none;-webkit-appearance:none;height:8px;border:0;border-radius:5px;background:#e8eef5;overflow:hidden;--bar:#2f6fa8;display:block;margin:2px 0 4px}
+progress::-webkit-progress-bar{background:#e8eef5;border-radius:5px}
+progress::-webkit-progress-value{background:var(--bar);border-radius:5px}
+progress::-moz-progress-bar{background:var(--bar);border-radius:5px}
+.tc0{--bar:#2f6fa8}.tc1{--bar:#e08a3c}.tc2{--bar:#3a9d7a}.tc3{--bar:#8e6bbf}.tc4{--bar:#d0586a}.tc5{--bar:#6b7f95}
+progress.mini{height:6px;min-width:70px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--bar,#2f6fa8);margin-right:8px;vertical-align:baseline}
+/* monitor */
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin:14px 0 8px}
+.kpi{background:#fff;border:1px solid var(--line);padding:14px 18px}
+.kpi small{color:var(--soft);font-size:12px}
+.kpi strong{display:block;font-size:24px;line-height:1.3;color:#17406a;font-variant-numeric:tabular-nums}
+.kpi progress{margin-top:8px}
+.big-acc{font-size:22px;font-weight:700;color:#17406a;font-variant-numeric:tabular-nums;line-height:1.3}
+.mini-grid{display:grid;grid-template-columns:auto minmax(70px,1fr) auto;gap:3px 8px;align-items:center;font-size:12px;min-width:250px}
+.mini-grid progress{margin:0}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--soft);margin-bottom:6px}
+.curve-chart{display:block;width:100%;height:auto}
+#batch-progress td,#batch-progress th{vertical-align:middle}
+/* results */
+.exports{margin:0 0 14px}
+.btn{display:inline-block;border-radius:8px;padding:8px 18px;font-weight:600;text-decoration:none;background:var(--accent);color:#fff;border:1px solid var(--accent)}
+.btn.o{background:#fff;color:var(--accent);border-color:#b8cde2}
+.btn:hover{filter:brightness(.97)}
+.result-note{margin:0 0 14px;color:var(--soft)}
+.podiums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.podium{background:#fff;border:1px solid var(--line);border-top:4px solid #2f6fa8;padding:14px 18px}
+.podium small{color:var(--soft);font-size:12px}
+.podium strong{display:block;font-size:20px;color:#17406a}
+.podium .score{display:block;font-size:30px;font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums}
+.podium em{font-style:normal;font-size:12px;color:var(--soft)}
+.pc0{border-top-color:#2f6fa8}.pc0 .score{color:#2f6fa8}.pc1{border-top-color:#e08a3c}.pc1 .score{color:#e08a3c}.pc2{border-top-color:#3a9d7a}.pc2 .score{color:#3a9d7a}
+.heat{text-align:center;border-radius:6px;padding:6px 4px;font-variant-numeric:tabular-nums;color:#1f2f45}
+.heat-0{background:#eaf2fa}.heat-1{background:#cfe1f2}.heat-2{background:#a9c9e6}.heat-3{background:#7eabd5}
+.heat-4{background:#4f87bd;color:#fff}.heat-5{background:#2f6fa8;color:#fff}.heat-na{background:#f1f4f8;color:#8592a3}
+.charts{display:grid;gap:0}
+.chart-card{margin-bottom:16px;overflow:hidden}
+.chart-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.chart-head h3{margin:0}
+.chart-head .row{margin:0}
+.chart-card .competition-chart{min-width:0;width:100%;height:auto}
+.fold .chart-card{border:1px solid var(--line)}
+@media(max-width:1000px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.podiums{grid-template-columns:1fr}}
+
+#stats .card:last-child{grid-column:auto}#stats .card:last-child strong{font-size:28px}
+.kpi strong{font-size:22px;white-space:nowrap}
+.charts{grid-template-columns:1fr}

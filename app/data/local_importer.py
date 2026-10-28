@@ -126,9 +126,9 @@ def _atomic_write(path, content):
         temporary.unlink(missing_ok=True)
 
 
-def import_local(folder):
+def import_local(folder, source=None):
     folder = Path(folder).resolve()
-    source_path = folder / 'qa_all.json'
+    source_path = Path(source) if source else folder / 'qa_all.json'
     if not source_path.is_file():
         raise ValueError('工作区 images/qa_all.json 不存在；请将完整题库和截图放入项目根目录 images 文件夹')
     if source_path.stat().st_size > 20_000_000:
@@ -202,3 +202,36 @@ def import_local(folder):
         return dict(total=len(rows), counts=counts, mapped_frames=len(mappings),
                     real_image_questions=len(rows), source_sha256=source_hash,
                     changed=changed, changed_inputs=changed_inputs, backup=backup)
+
+
+def import_upload(qa_bytes, images):
+    """Manual import: files the organizer picked in the browser, staged then validated exactly like the workspace import.
+
+    images: iterable of (relative_name, bytes); the selected folder's own name is dropped.
+    """
+    if not qa_bytes:
+        raise ValueError('请选择题库 JSON 文件')
+    if len(qa_bytes) > 20_000_000:
+        raise ValueError('qa_all.json 超过 20MB')
+    home = S.HOME
+    home.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=home) as temporary:
+        folder = Path(temporary) / 'images'
+        folder.mkdir()
+        count = 0
+        for name, data in images:
+            parts = [p for p in PurePosixPath(name.replace('\\', '/')).parts if p not in ('/', '.')]
+            if len(parts) > 1:
+                parts = parts[1:]  # webkitRelativePath starts with the chosen folder's name
+            if (not parts or '..' in parts or ':' in parts[0]
+                    or PurePosixPath(parts[-1]).suffix.lower() not in ('.png', '.jpg', '.jpeg', '.webp')):
+                continue  # ignore .DS_Store, thumbnails and other non-image files
+            target = folder.joinpath(*parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+            count += 1
+        if not count:
+            raise ValueError('所选文件夹中没有 png / jpg / webp 截图')
+        source = Path(temporary) / 'qa_all.json'
+        source.write_bytes(qa_bytes)
+        return import_local(folder, source)

@@ -156,3 +156,22 @@ def test_dataset_stats_endpoint_keeps_its_shape(client):
     data = client.get('/api/dataset/stats').json()
     assert set(data) == {'total', 'counts', 'expected', 'real_image_questions', 'missing_image_questions',
                          'unique_frames', 'mapped_frames'}
+
+
+def test_running_accuracy_uses_answered_questions(client):
+    batch_id, (rid,) = seed_batch(['running'])
+    with db() as c:
+        for i, ok in enumerate([True, True, False, True]):
+            qid = f'L2_main-{i % 2}' if i < 2 else f'L3_main-{i % 2}'
+            c.execute('INSERT INTO results VALUES(?,?,?)', (rid, qid, dumps(dict(
+                question_id=qid, dimension=qid.rsplit('-', 1)[0], status='ok' if ok else 'wrong', correct=ok, answer=['A'], calls=1))))
+    from app.services.monitor import accuracy_curve
+    curve = accuracy_curve(rid)
+    assert curve[-1] == [4, 0.75] and curve[0] == [1, 1.0]
+    data = client.get(f'/api/evaluation-batches/{batch_id}/accuracy-curves').json()
+    assert data[0]['completed'] == 4 and data[0]['curve'][-1] == [4, 0.75]
+    run = competition.get_batch(batch_id)['runs'][0]
+    assert run['answered_accuracy'] == 0.75
+    assert run['dimensions']['L2_main']['answered_accuracy'] == 1.0
+    assert run['dimensions']['L3_main']['answered_accuracy'] == 0.5
+    assert run['dimensions']['L2_sub']['answered_accuracy'] is None
