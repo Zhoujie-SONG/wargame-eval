@@ -121,6 +121,12 @@ def import_bundled():
     return import_zip(candidates[0].read_bytes())
 
 
+@app.post('/api/dataset/import-local')
+def import_local_dataset():
+    from app.data.local_importer import import_local
+    return import_local(ROOT / 'images')
+
+
 @app.get('/api/dataset/stats')
 def dataset_stats():
     from app.services.dataset import overview

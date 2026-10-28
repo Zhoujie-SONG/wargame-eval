@@ -8,5 +8,8 @@ tests
 *.log
 selected_240_six_groups*.zip
 .publish-tools
+/images
+/selected_240_six_groups
+/deepseek-participant-submission.json
 .env
 .env.*

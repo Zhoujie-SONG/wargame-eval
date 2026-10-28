@@ -6,7 +6,7 @@ from app.db import db
 from app.settings import HOME
 
 
-def store_image(content, real):
+def validate_image(content):
     if len(content) > 20_000_000:
         raise ValueError('图片超过 20MB')
     try:
@@ -19,7 +19,11 @@ def store_image(content, real):
                 img.verify()
     except Exception:
         raise ValueError('无效图片；仅支持完整的 PNG / JPEG / WebP，最多 4000 万像素') from None
-    digest = hashlib.sha256(content).hexdigest()
+    return hashlib.sha256(content).hexdigest(), mime
+
+
+def store_image(content, real):
+    digest, mime = validate_image(content)
     with db() as c:
         old = c.execute('SELECT * FROM images WHERE id=?', (digest,)).fetchone()
         if old and bool(old['real']) != real:

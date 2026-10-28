@@ -42,9 +42,34 @@ async function showRun(id){state.selectedRun=id;const r=await api('/runs/'+id);c
  $('#infra-form').onsubmit=action(async()=>{const d=form('#infra-form');await api('/runs/'+id+'/infrastructure','POST',{question_ids:d.question_ids.split(/[\s,，]+/).filter(Boolean),reason:d.reason});notice('故障已登记。可在任务监控中按冻结配置重跑。');await showRun(id);await loadRuns()});
  node.scrollIntoView({block:'start'});
 }
-async function switchTab(tab){if(tab==='reports')tab='analytics';state.tab=tab;document.querySelectorAll('.page').forEach(n=>n.hidden=n.id!==tab);document.querySelectorAll('nav button').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));$('#title').textContent=labels[tab];$('#run-detail').hidden=true;state.selectedRun=null;location.hash=tab;if(tab==='monitor')await loadRuns();if(tab==='analytics')await board();if(tab==='dataset'){await stats();await search();await loadImages()}document.dispatchEvent(new CustomEvent('wargame:tab',{detail:tab}))}
+async function switchTab(tab){
+ if(tab==='reports')tab='analytics';
+ state.tab=tab;
+ document.querySelectorAll('.page').forEach(n=>n.hidden=n.id!==tab);
+ document.querySelectorAll('nav button').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));
+ $('#title').textContent=labels[tab];$('#run-detail').hidden=true;state.selectedRun=null;
+ // Keep the URL without the browser scrolling to the section's matching ID.
+ if(location.hash!=='#'+tab)history.pushState(null,'','#'+tab);
+ window.scrollTo({top:0,left:0,behavior:'instant'});
+ if(tab==='monitor')await loadRuns();
+ if(tab==='analytics')await board();
+ if(tab==='dataset'){await stats();await search();await loadImages()}
+ document.dispatchEvent(new CustomEvent('wargame:tab',{detail:tab}));
+}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=action(()=>switchTab(b.dataset.tab)));
 $('#bundled').onclick=action(async()=>{notice('正在导入…');const d=await api('/dataset/import-bundled','POST');notice('导入完成：'+d.total+' 题');await stats();await search()});
+$('#import-local').onclick=action(async()=>{
+ const button=$('#import-local'),result=$('#dataset-import-result');
+ button.disabled=true;result.textContent='正在校验题库、截图与关联，请稍候…';
+ try{
+  const d=await api('/dataset/import-local','POST');
+  result.textContent=`${d.changed?'导入完成':'数据一致，无需重复导入'}：${d.total} 道 QA，${d.mapped_frames} 个截图帧，全部题目已关联真实截图。`+(d.backup?` 更新前备份：data/raw/${d.backup}；${d.changed_inputs} 道题的输入文字有变化（含换行差异），历史任务快照保留。`:'');
+  state.offset=0;$('#question-detail').innerHTML='';
+  await stats();await search();await loadImages();
+  document.dispatchEvent(new CustomEvent('wargame:dataset-imported'));
+ }catch(err){result.textContent='导入失败：'+err.message;throw err}
+ finally{button.disabled=false}
+});
 $('#import-form').onsubmit=action(async()=>{const d=await api('/dataset/import','POST',new FormData($('#import-form')));notice('导入完成：'+d.total+' 题');await stats();await search()});
 $('#image-form').onsubmit=action(async()=>{const f=new FormData($('#image-form'));f.set('real',$('#image-form').elements.real.checked?'true':'false');const d=await api('/images','POST',f);await loadImages();$('#image-select').value=d.id;notice('上传完成，资源 ID：'+d.id+'。请填写复盘与 step 保存关联。')});
 $('#map-form').onsubmit=action(async()=>{const d=form('#map-form');d.image_step=+d.image_step;await api('/images/map','POST',[d]);notice('已关联，同帧所有 QA 复用此图片');await stats();await search()});

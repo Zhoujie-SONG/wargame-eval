@@ -73,4 +73,5 @@ document.addEventListener('click',ev=>{
   if(ev.target.closest('button'))refreshSoon();
 });
 document.addEventListener('change',refreshSoon);
+document.addEventListener('wargame:dataset-imported',refresh);
 })();

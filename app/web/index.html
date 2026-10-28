@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.4</title><link rel="icon" type="image/png" href="/static/favicon.png?v=1.4-logo"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.4</title><link rel="icon" type="image/png" href="/static/favicon-transparent.png?v=1.4-transparent"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script></head>
 <body>
 <aside><div class="brand"><div class="brand-heading"><img class="brand-logo" src="/static/favicon.png?v=1.4-logo" alt="" width="40" height="40"><span class="brand-title"><span>庙算杯</span><span>态势感知赛道</span></span></div><small>竞赛执行平台 · V1.4</small></div><nav aria-label="管理导航">
 <div class="nav-group" aria-labelledby="competition-nav"><h2 id="competition-nav">正式比赛</h2>
@@ -20,7 +20,8 @@
 <div id="flow-status" class="status-line" role="status" aria-live="polite" hidden></div>
 <section id="dataset" class="page">
 <div id="stats" class="cards"></div>
-<div class="panel"><h2>导入已审核 QA</h2><p>只解析原始 Markdown，不修改题干、选项或 GT。重复导入相同文件安全；数量不符时整批拒绝。</p><div class="row"><button id="bundled">导入工作区原始 ZIP</button><form id="import-form" class="row"><input type="file" name="file" accept=".zip" required aria-label="QA ZIP"><button>上传 ZIP</button></form></div></div>
+<div class="panel"><h2>一键导入题库与截图</h2><p>将 <code>qa_all.json</code> 和真实兵棋截图放在项目根目录的 <code>images/</code> 文件夹，点击一次即可导入全部 QA、主子题关系及截图关联，无需逐张上传或填写映射。</p><p class="muted">按 JSON 原样保留输入与 GT。更新已有题库时自动备份；历史任务的冻结题目与截图保留。运行或排队期间禁止更新题库。截图真实性由主办方负责确认。</p><button id="import-local" type="button">一键导入本地题库与截图</button><p id="dataset-import-result" role="status" aria-live="polite"></p></div>
+<details class="panel"><summary>兼容导入：原始 Markdown ZIP</summary><p>只解析原始 Markdown，不修改题干、选项或 GT。重复导入相同文件安全；与已有数据不同时整批拒绝。ZIP 不包含自动截图关联，请使用下方工具补充。</p><div class="row"><button id="bundled">导入工作区原始 ZIP</button><form id="import-form" class="row"><input type="file" name="file" accept=".zip" required aria-label="QA ZIP"><button>上传 ZIP</button></form></div></details>
 <div class="panel"><h2>截图上传与关联</h2><p>同一复盘、同一 step 的所有题目共用截图。真实来源由管理员声明；Mock 图片不能转为真实图片。<a href="/api/images/missing.csv">下载缺失截图清单</a></p>
 <form id="image-form" class="row"><input type="file" name="file" accept="image/png,image/jpeg,image/webp" required aria-label="截图文件"><label class="inline"><input type="checkbox" name="real" checked>真实兵棋截图</label><button>上传图片</button></form>
 <form id="map-form" class="grid3"><label>复盘 ID<input name="replay_id" required></label><label>图像 step<input name="image_step" type="number" min="0" value="0" required></label><label>图片资源<select name="image_id" id="image-select" required></select></label><button>关联这一帧的全部 QA</button></form>

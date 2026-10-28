@@ -4,6 +4,31 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const crypto=require('node:crypto');
 
+test('one-click dataset import disables duplicate clicks and refreshes readiness after completion',async()=>{
+  const nodes=new Map(),events=[],refreshes=[];
+  const $=id=>{if(!nodes.has(id))nodes.set(id,{});return nodes.get(id)};
+  let resolve;
+  const context={$,state:{offset:20},action:fn=>fn,
+    api:(url,method)=>{assert.equal(url,'/dataset/import-local');assert.equal(method,'POST');return new Promise(r=>resolve=r)},
+    stats:async()=>refreshes.push('stats'),search:async()=>refreshes.push('search'),loadImages:async()=>refreshes.push('images'),
+    document:{dispatchEvent:ev=>events.push(ev.type)},CustomEvent:class{constructor(type){this.type=type}}};
+  vm.createContext(context);
+  const app=fs.readFileSync('app/web/app.js','utf8');
+  vm.runInContext(app.slice(app.indexOf("$('#import-local').onclick="),app.indexOf("$('#import-form').onsubmit=")),context);
+  const pending=$('#import-local').onclick();
+  assert.equal($('#import-local').disabled,true);
+  resolve({total:1279,mapped_frames:240,changed:true,changed_inputs:1279,backup:'dataset-backup-test.json'});
+  await pending;
+  assert.equal($('#import-local').disabled,false);assert.equal(context.state.offset,0);
+  assert.deepEqual(refreshes,['stats','search','images']);assert.deepEqual(events,['wargame:dataset-imported']);
+  assert.match($('#dataset-import-result').textContent,/1279 道 QA，240 个截图帧/);
+  assert.match($('#dataset-import-result').textContent,/dataset-backup-test.json/);
+  context.api=async()=>{throw Error('截图匹配到 0 张')};
+  await assert.rejects($('#import-local').onclick(),/截图匹配到 0 张/);
+  assert.equal($('#import-local').disabled,false);
+  assert.match($('#dataset-import-result').textContent,/导入失败/);
+});
+
 function setup(storage=new Map()){
   const nodes=new Map(),listeners=new Map(),rosterStorage=new Map(),timers=[];
   const html=fs.readFileSync('app/web/index.html','utf8');
@@ -27,6 +52,31 @@ function setup(storage=new Map()){
 }
 const plan={fingerprint:'f'.repeat(64),teams:2,questions_per_team:1279,max_requests:7674,max_external_requests:7674,mode:'self_refine',calls:3,real_images_complete:true};
 function answerDialog($,answer){const d=$('#official-start-dialog');let close;d.addEventListener=(event,fn)=>close=fn;d.showModal=()=>{d.returnValue=answer;close()}}
+
+test('sidebar navigation opens every page at the top without an anchor jump, including repeat clicks',async()=>{
+  const tabs=['dataset','submissions','batches','analytics','models','prompts','create','monitor'];
+  const pages=tabs.map(id=>({id,hidden:true})),nodes=new Map(),events=[];
+  let hash='#batches',scrollY=900,anchorJumps=0;
+  const context={state:{},labels:Object.fromEntries(tabs.map(id=>[id,id])),
+    $:id=>{if(!nodes.has(id))nodes.set(id,{});return nodes.get(id)},
+    location:{get hash(){return hash},set hash(v){hash='#'+v;scrollY=300;anchorJumps++}},
+    history:{pushState:(_,__,url)=>{hash=url}},window:{scrollTo:({top})=>{scrollY=top}},
+    document:{querySelectorAll:s=>s==='.page'?pages:[],dispatchEvent:ev=>events.push(ev.detail)},
+    CustomEvent:class{constructor(type,init){this.detail=init.detail}},
+    loadRuns:async()=>{},board:async()=>{},stats:async()=>{},search:async()=>{},loadImages:async()=>{}};
+  vm.createContext(context);
+  const app=fs.readFileSync('app/web/app.js','utf8');
+  vm.runInContext(app.slice(app.indexOf('async function switchTab('),app.indexOf("document.querySelectorAll('nav button').forEach(b=>")),context);
+  for(const tab of [...tabs,'monitor','reports']){
+    scrollY=900;
+    await context.switchTab(tab);
+    const target=tab==='reports'?'analytics':tab;
+    assert.equal(scrollY,0);assert.equal(hash,'#'+target);assert.equal(context.state.tab,target);
+    assert.deepEqual(pages.filter(p=>!p.hidden).map(p=>p.id),[target]);
+    assert.equal(nodes.get('#run-detail').hidden,true);assert.equal(events.at(-1),target);
+  }
+  assert.equal(anchorJumps,0);
+});
 
 test('group numbering remains independent; formal form has one primary action and no test controls',()=>{
   const html=fs.readFileSync('app/web/index.html','utf8'),nav=html.match(/<nav[\s\S]*?<\/nav>/)[0],form=html.match(/<form id="batch-form"[\s\S]*?<\/form>/)[0];

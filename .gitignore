@@ -13,3 +13,6 @@ results/*
 selected_240_six_groups*.zip
 data/raw/
 .publish-tools/
+/images/
+/selected_240_six_groups/
+/deepseek-participant-submission.json
