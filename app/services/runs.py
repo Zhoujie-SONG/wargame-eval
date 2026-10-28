@@ -135,8 +135,24 @@ def report(run_id, include_results=True):
     return value
 
 
+def question_sets(questions):
+    """Group questions into sets (one screenshot: a main question and its sub-questions).
+
+    A set is always done one question at a time: sub-questions first (dataset order), the main question
+    last. Parallelism is only between different sets, never inside one set.
+    """
+    sets, order = {}, []
+    for q in questions:
+        key = q.get('parent_id') or q['question_id']
+        if key not in sets:
+            sets[key] = []
+            order.append(key)
+        sets[key].append(q)
+    return [sorted(sets[key], key=lambda q: q['role'] == 'main') for key in order]  # stable: subs stay in order
+
+
 # Concurrency: teams of one batch run at the same time; inside a team up to `concurrency` questions
-# are in flight (the same number for every team, frozen in the run). One global cap protects this machine.
+# (= sets of questions) are in flight (the same number for every team, frozen in the run). One global cap protects this machine.
 DEFAULT_TEAM_CONCURRENCY = 4
 MAX_TEAM_CONCURRENCY = 16
 GLOBAL_CONCURRENCY = int(os.environ.get('WARGAME_GLOBAL_CONCURRENCY', '64'))
@@ -262,15 +278,16 @@ class Runner:
             await asyncio.to_thread(write_result, qid, value)
             return True
 
-        pending = deque(body['questions'])
+        pending = deque(question_sets(body['questions']))
 
         async def lane():
+            # One lane works on one set at a time, so questions in flight always come from different sets.
             while pending and not await should_stop():
-                q = pending.popleft()
-                async with self.slots:
-                    if await should_stop() or not await answer(q):
-                        return
-                await asyncio.sleep(0)  # yield between even instant Mock requests
+                for q in pending.popleft():
+                    async with self.slots:
+                        if await should_stop() or not await answer(q):
+                            return
+                    await asyncio.sleep(0)  # yield between even instant Mock requests
 
         lanes = max(1, min(int(body.get('concurrency', 1)), MAX_TEAM_CONCURRENCY))
         tasks = [asyncio.create_task(lane()) for _ in range(lanes)]

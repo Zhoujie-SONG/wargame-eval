@@ -1,5 +1,7 @@
 """Teams of a batch run together, questions inside a team run N at a time, 429 waits are free."""
 import asyncio
+import json
+import re
 import time
 from uuid import uuid4
 
@@ -152,7 +154,7 @@ def test_probe_stops_at_the_first_refused_level_and_reports_the_stable_one(clien
             finally:
                 self.active -= 1
     fake = Limited8()
-    monkeypatch.setattr(cp, '_prepare', lambda sid: ({'team_id': 'alpha'}, {'model_id': 'M'}, fake, []))
+    monkeypatch.setattr(cp, '_prepare', lambda sid: ({'team_id': 'alpha'}, {'model_id': 'M'}, fake, [[] for _ in range(16)]))
     result = client.post('/api/competition/probe-concurrency', json={'submission_id': 'x'}).json()
     assert result['stable'] == 4 and result['team_id'] == 'alpha'
     assert [row['level'] for row in result['levels']] == [1, 2, 4, 8]    # stops after 8 failed, never sends 16
@@ -181,3 +183,63 @@ def test_many_teams_and_lanes_write_every_result_exactly_once(client, monkeypatc
             monitor = c.execute('SELECT completed FROM run_monitor WHERE run_id=?', (rid,)).fetchone()[0]
         assert calls == 120 and monitor == 120                  # monitor triggers stayed in step
     assert p.peak <= 64 and time.monotonic()-started < 20
+
+
+def make_sets_run(sets, concurrency):
+    """sets: sub-question counts; each set gets one main question (listed first, as in the dataset) and its sub-questions."""
+    rid = make_run(0, concurrency, '套题队')
+    qs = []
+    for s, subs in enumerate(sets):
+        qs.append(dict(question_id=f's{s}-CORE', parent_id=None, level='L2', role='main'))
+        qs += [dict(question_id=f's{s}-P{k}', parent_id=f's{s}-CORE', level='L1', role='sub') for k in range(subs)]
+    qs = [dict(q, gt_answer=['A'], input_text=f'Q[{q["question_id"]}] A. 甲 B. 乙', question_type='single_choice',
+               options=['A', 'B'], image=None) for q in qs]
+    with db() as c:
+        body = json.loads(c.execute('SELECT body FROM runs WHERE id=?', (rid,)).fetchone()[0])
+        body['questions'] = qs
+        c.execute('UPDATE runs SET body=? WHERE id=?', (dumps(body), rid))
+    return rid
+
+
+class SetProbe:
+    """Records which questions are in flight and the order in which they start."""
+    def __init__(self):
+        self.active, self.started, self.peak, self.same_set = set(), [], 0, 0
+
+    async def complete(self, messages, timeout):
+        qid = re.search(r'Q\[(s\d+-\w+)\]', str(messages)).group(1)
+        sample = qid.split('-')[0]
+        self.same_set = max(self.same_set, 1 + sum(a.startswith(sample + '-') for a in self.active))
+        self.active.add(qid)
+        self.started.append(qid)
+        self.peak = max(self.peak, len({a.split('-')[0] for a in self.active}))
+        await asyncio.sleep(.01)
+        self.active.discard(qid)
+        return {'output': 'A', 'usage': {}}
+
+
+def test_question_sets_put_sub_questions_first_and_main_last():
+    qs = [dict(question_id='A-CORE', parent_id=None, role='main'), dict(question_id='A-P1', parent_id='A-CORE', role='sub'),
+          dict(question_id='B-CORE', parent_id=None, role='main'), dict(question_id='A-P2', parent_id='A-CORE', role='sub'),
+          dict(question_id='B-P1', parent_id='B-CORE', role='sub')]
+    assert [[q['question_id'] for q in g] for g in runs.question_sets(qs)] == [['A-P1', 'A-P2', 'A-CORE'], ['B-P1', 'B-CORE']]
+
+
+def test_only_different_sets_run_together_sub_questions_first(client, monkeypatch):
+    p = SetProbe()
+    monkeypatch.setattr(runs, 'make_client', lambda *a: p)
+    rid = make_sets_run([3, 5, 2, 4, 6, 3], 4)
+    asyncio.run(runs.Runner().execute(rid))
+    assert status_and_results(rid) == ('completed', 29)
+    assert p.same_set == 1 and p.peak == 4                    # never two of one set at once; 4 sets in parallel
+    for sample in {q.split('-')[0] for q in p.started}:
+        mine = [q for q in p.started if q.startswith(sample + '-')]
+        assert mine[-1].endswith('CORE') and mine[:-1] == sorted(mine[:-1])
+
+
+def test_one_lane_does_one_set_after_another(client, monkeypatch):
+    p = SetProbe()
+    monkeypatch.setattr(runs, 'make_client', lambda *a: p)
+    rid = make_sets_run([2, 2, 2], 1)
+    asyncio.run(runs.Runner().execute(rid))
+    assert p.peak == 1 and [q.split('-')[0] for q in p.started] == ['s0']*3 + ['s1']*3 + ['s2']*3

@@ -1,7 +1,8 @@
 """Measure how many simultaneous requests one team's API accepts, with a few real requests.
 
-The probe sends the first real question (with its screenshot) in rising groups of 1, 2, 4, 8, 16
-simultaneous requests and stops at the first group that is refused or fails. At most 31 requests
+The probe sends real questions in rising groups of 1, 2, 4, 8, 16 simultaneous requests and stops at
+the first group that is refused or fails. Like the real run, simultaneous requests come from different
+sets: each uses the main question (and screenshot) of a different set. At most 31 requests
 per team. Nothing is stored; the organizer decides the shared per-team concurrency from the result.
 """
 import asyncio
@@ -44,21 +45,26 @@ def _prepare(submission_id):
         raise ValueError('模型或 Prompt 配置不存在')
     model, prompt = json.loads(model_row['body']), json.loads(prompt_row['body'])
     images = get_images()
+    prepared, seen = [], set()
     for q in question_rows():
         image = images.get((q['replay_id'], q['image_step']))
-        if image and image['real']:
-            public = {k: q[k] for k in ('input_text', 'question_type', 'options')} | {'image': image}
+        if q['role'] != 'main' or not image or not image['real'] or image['id'] in seen:
+            continue
+        seen.add(image['id'])
+        public = {k: q[k] for k in ('input_text', 'question_type', 'options')} | {'image': image}
+        prepared.append(initial_messages(public, prompt))
+        if len(prepared) == max(LEVELS):
             break
-    else:
-        raise ValueError('题库中没有关联真实截图的题目，请先完成 01 数据集')
-    return sub, model, make_client(model, credentials(model, model_row['secret'])), initial_messages(public, prompt)
+    if not prepared:
+        raise ValueError('题库中没有关联真实截图的主问题，请先完成 01 数据集')
+    return sub, model, make_client(model, credentials(model, model_row['secret'])), prepared
 
 
 async def probe_team(submission_id):
-    sub, model, client, messages = await asyncio.to_thread(_prepare, submission_id)
+    sub, model, client, prepared = await asyncio.to_thread(_prepare, submission_id)
     levels, stable = [], 0
     for level in LEVELS:
-        outcomes = await asyncio.gather(*[_one(client, messages) for _ in range(level)])
+        outcomes = await asyncio.gather(*[_one(client, prepared[i % len(prepared)]) for i in range(level)])
         kinds = [k for k, _ in outcomes]
         row = {'level': level, 'ok': kinds.count('ok'), 'limited': kinds.count('limited'),
                'timeout': kinds.count('timeout'), 'error': kinds.count('error'),

@@ -18,7 +18,7 @@ const MODE_NAMES={single_pass:'Single-pass · 单次推理',self_refine:'Self-re
 const concurrencyNow=()=>{const f=$('#batch-form');return +(f&&f.elements&&f.elements.concurrency&&f.elements.concurrency.value||4)};
 function renderProbe(){const box=$('#probe-result');if(!box||!cs.probe)return;const list=cs.probe,names=new Map((cs.submissions||[]).map(x=>[x.id,x.team_name]));
  const LV=[1,2,4,8,16],cell=(r,l)=>{const x=(r.levels||[]).find(v=>v.level===l);return x?(x.ok===l?'<span class="probe-ok">✓</span>':'<span class="probe-bad">'+(x.limited?'限流':'失败')+'</span>'):'—'};
- const rows=list.map(r=>[e(names.get(r.submission_id)||r.team_id||r.submission_id),...LV.map(l=>r.error?'—':cell(r,l)),r.error?'<span class="probe-bad">'+e(r.error)+'</span>':'<b>'+r.stable+' 路</b>',e(r.error?'':r.note)]);
+ const rows=list.map(r=>[e(names.get(r.submission_id)||r.team_id||r.submission_id),...LV.map(l=>r.error?'—':cell(r,l)),r.error?'<span class="probe-bad">'+e(r.error)+'</span>':'<b>'+r.stable+' 套</b>',e(r.error?'':r.note)]);
  const ok=list.filter(r=>!r.error),bad=list.length-ok.length,min=ok.length?Math.min(...ok.map(r=>r.stable)):0;
  const options=[...$('#batch-form').elements.concurrency.options].map(o=>+o.value),pick=Math.max(0,...options.filter(v=>v<=min));
  cs.probePick=pick;
@@ -26,7 +26,7 @@ function renderProbe(){const box=$('#probe-result');if(!box||!cs.probe)return;co
   +(bad||!pick?'<p class="roster-warning" role="alert">'+(bad?bad+' 支队伍检测失败；':'')+(pick?'':'有队伍连 1 路都不稳定；')+'请先处理这些队伍的接口问题再开赛。</p>':'')
   +(pick?'<p>各队稳定并发的最小值是 <b>'+min+' 路</b>，建议全队统一使用 <b>'+pick+' 路</b>。 <button type="button" class="secondary" id="probe-apply">采用 '+pick+' 路</button></p>':'')}
 function renderLaunchSummary(){const f=$('#batch-form');if(!f||!f.elements)return;const mode=f.elements.mode.value,calls=mode==='single_pass'?1:(+f.elements.calls.value||1),teams=cs.selected.size;
- const rows=[['参赛队伍',teams+' 支（在“参赛名单”调整）'],['每队题数','1,279 道 QA'],['推理策略',MODE_NAMES[mode]||mode],['每题最大调用',calls+' 次'],['队内并发',concurrencyNow()+' 路（全队统一，各队同时开始）'],['最大 API 请求数',teams?fmt(teams)+' × 1,279 × '+calls+' = '+fmt(teams*1279*calls):'—']];
+ const rows=[['参赛队伍',teams+' 支（在“参赛名单”调整）'],['每队题数','1,279 道 QA'],['推理策略',MODE_NAMES[mode]||mode],['每题最大调用',calls+' 次'],['队内并发',concurrencyNow()+' 套题同时做（全队统一，各队同时开始；套内先子问题后主问题）'],['最大 API 请求数',teams?fmt(teams)+' × 1,279 × '+calls+' = '+fmt(teams*1279*calls):'—']];
  $('#launch-summary').innerHTML='<dl class="kv">'+rows.map(([k,v])=>'<div><dt>'+e(k)+'</dt><dd>'+e(v)+'</dd></div>').join('')+'</dl>'+(cs.probePick&&concurrencyNow()>cs.probePick?'<p class="roster-warning">所选并发高于检测结果（'+cs.probePick+' 路），可能触发限流；限流会自动等待重试，但会拖慢比赛。</p>':'')}
 function askConfirm(title,text){const dialog=$('#confirm-dialog');$('#confirm-title').textContent=title;$('#confirm-text').textContent=text;
  return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true});dialog.returnValue='cancel';dialog.showModal()})}
@@ -42,7 +42,7 @@ async function confirmOfficialStart(batch){
  const outdated=items.filter(item=>{const newer=latest.get(item.team_id);return newer&&newer.submission_version!==item.submission_version});
  const summary=table(['确认项目','本次正式比赛配置'],[
   ['比赛名称',e(batch.name)],['参赛队伍',p.teams+' 支'],['每队 QA',p.questions_per_team+' 道'],
-  ['推理模式',e(p.mode)],['每题最大调用',p.calls+' 次'],['每队并发',(p.concurrency||1)+' 路（全队统一，各队同时开始）'],
+  ['推理模式',e(p.mode)],['每题最大调用',p.calls+' 次'],['每队并发',(p.concurrency||1)+' 套题同时做（全队统一，各队同时开始；套内先子问题后主问题）'],
   ['预计最大 API 请求数',p.teams+' × '+p.questions_per_team+' × '+p.calls+' = '+p.max_requests],
   ['截图状态',p.real_images_complete?'完整':'不完整'],
   ['模型状态',p.max_external_requests===p.max_requests?'全部真实模型':'存在不合法配置']]);
@@ -139,7 +139,7 @@ async function showBatch(id){cs.batchId=id;const rev=++cs.progressRevision;const
      bar(c,r.completed,r.total)+'<span class="num muted small">'+fmt(r.completed)+' / '+fmt(r.total)+' · '+(r.total?Math.round(r.completed/r.total*100):0)+'%</span>',
      '<div class="big-acc">'+pct1(r.completed?acc:null)+'</div><span class="muted small">已答 '+fmt(r.completed)+' 题中答对 '+fmt(done)+'</span>',
      '<div class="mini-grid">'+dimsHtml+'</div>',e(errorText(r)),badge(r.status),'<button data-run="'+e(r.run_id)+'">逐题详情</button>']});
- node.innerHTML='<h2>'+e(b.name)+' '+badge(b.status)+'</h2><p class="tag">'+e(modeLabel(b.plan.official))+(b.plan.concurrency?' ｜ 每队 '+b.plan.concurrency+' 路并发':'')+'</p>'
+ node.innerHTML='<h2>'+e(b.name)+' '+badge(b.status)+'</h2><p class="tag">'+e(modeLabel(b.plan.official))+(b.plan.concurrency?' ｜ 每队 '+b.plan.concurrency+' 套并发':'')+'</p>'
   +'<div class="kpis">'+kpi('整体进度',pct.toFixed(1)+'%',fmt(b.completed)+' / '+fmt(b.total)+' 题',bar('overall-bar',b.completed,b.total))
   +(running?kpi('预计剩余',remain,b.completed>=20?'按本批次平均速度估算':'已完成 20 题后给出估算'):kpi('未完成题数',fmt(b.total-b.completed),'本批次尚未全部完成'))
   +kpi(partial?'已答题平均准确率':'平均准确率',pct1(answered?right/answered:null),partial?'仅统计已答题，非最终成绩':'全部题目')
@@ -236,7 +236,7 @@ $('#probe-concurrency').onclick=action(async()=>{
   cs.probe=out;renderProbe();renderLaunchSummary();status.textContent='检测完成'}
  finally{button.disabled=cs.launching||!!cs.pendingLaunch}
 });
-document.addEventListener('click',ev=>{const b=ev.target.closest('#probe-apply');if(!b||!cs.probePick)return;const f=$('#batch-form');f.elements.concurrency.value=String(cs.probePick);invalidate();notice('已采用 '+cs.probePick+' 路并发')});
+document.addEventListener('click',ev=>{const b=ev.target.closest('#probe-apply');if(!b||!cs.probePick)return;const f=$('#batch-form');f.elements.concurrency.value=String(cs.probePick);invalidate();notice('已采用 '+cs.probePick+' 套并发')});
 document.addEventListener('wargame:tab',action(async ev=>{if(ev.detail==='submissions')await loadSubmissions();if(ev.detail==='batches'){await loadSubmissions();populateCalls($('#batch-form'),cs.pendingLaunch?.payload.calls);updateCallsControl($('#batch-form'),'#batch-calls-help');setLaunchState(cs.launching,cs.pendingLaunch?'启动结果尚未确认，请沿用原批次重试。':'');renderLaunchSummary()}if(ev.detail==='analytics'){await loadBatches();await loadAnalytics(true)}}));
 // Progress polling is scoped to the selected batch; historical batch list refreshes
 // only every 15 seconds and never triggers a duplicate /progress request.
