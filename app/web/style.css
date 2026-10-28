@@ -8,7 +8,7 @@ aside{display:flex;flex-direction:column}aside nav{flex:1;min-height:0;max-heigh
 aside nav{max-height:none}@media(max-width:700px){aside nav{display:block;flex:auto;max-height:40vh;overflow-y:auto;margin-top:12px}nav button{width:100%;padding:9px 12px}.nav-group+.nav-group{margin-top:12px;padding-top:12px}}
 
 /* V1.4 four-step official competition workflow */
-#legacy-import summary, #historical-report summary { cursor: pointer; font-weight: 650; padding: 6px 0; }
+#legacy-import summary { cursor: pointer; font-weight: 650; padding: 6px 0; }
 #json-import-status { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; color: var(--muted, #54667a); }
 #submission-selection-status { margin: 12px 0; }
 #json-upload input[type=file] { min-width: 250px; max-width: 100%; }
@@ -137,3 +137,7 @@ progress.mini{height:6px;min-width:70px}
 #stats .card:last-child{grid-column:auto}#stats .card:last-child strong{font-size:28px}
 .kpi strong{font-size:22px;white-space:nowrap}
 .charts{grid-template-columns:1fr}
+
+.probe-ok{color:#1f7a5c;font-weight:700}.probe-bad{color:#a8372f;font-weight:600}
+#probe-result table{font-size:12px}
+#probe-result th,#probe-result td{padding:8px 6px;white-space:nowrap}#probe-result td:last-child{white-space:normal}

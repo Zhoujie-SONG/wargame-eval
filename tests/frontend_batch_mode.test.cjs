@@ -34,7 +34,8 @@ function setup(storage=new Map()){
   const html=fs.readFileSync('app/web/index.html','utf8');
   const ids=new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(x=>x[1]));
   function $(id){if(/^#[\w-]+$/.test(id)&&!ids.has(id.slice(1)))return null;if(!nodes.has(id))nodes.set(id,{value:'',checked:false,disabled:false,innerHTML:'',textContent:'',querySelectorAll(){return []},scrollIntoView(){},setCustomValidity(v){this.validationMessage=v}});return nodes.get(id)}
-  const fields={};for(const name of ['name','mode','calls','early_stop'])fields[name]=$('field:'+name);
+  const fields={};for(const name of ['name','mode','calls','early_stop','concurrency'])fields[name]=$('field:'+name);
+  fields.concurrency.value='4';fields.concurrency.options=[1,2,4,8,16].map(value=>({value:String(value)}));
   fields.name.value='正式比赛';fields.mode.value='self_refine';fields.calls.value='3';
   $('#batch-form').elements=fields;$('#batch-form').querySelectorAll=()=>Object.values(fields);
   const context={$,crypto,URLSearchParams,Set,Image:class{},labels:{},state:{settings:{competition:{max_calls_per_question:3}}},
@@ -46,7 +47,7 @@ function setup(storage=new Map()){
   vm.createContext(context);
   const app=fs.readFileSync('app/web/app.js','utf8');
   vm.runInContext(app.slice(app.indexOf('function populateCalls('),app.indexOf('function selectPrompt(')),context);
-  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={renderGroup,curveSvg,loadCurves,batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadSubmissions,restoreLatestRoster,loadAnalytics,cs,showBatch,renderLaunchSummary,selectionNotice,fmtDuration};})();');
+  const source=fs.readFileSync('app/web/competition.js','utf8').replace(/\}\)\(\);\s*$/,'globalThis.testAPI={renderProbe,renderGroup,curveSvg,loadCurves,batchPayload,invalidate,confirmOfficialStart,startOfficial,renderTeamSelection,loadSubmissions,restoreLatestRoster,loadAnalytics,cs,showBatch,renderLaunchSummary,selectionNotice,fmtDuration};})();');
   vm.runInContext(source,context);
   return {context,fields,$,a:context.testAPI,storage,listeners,timers};
 }
@@ -332,4 +333,26 @@ test('results: podium, heat cells and chart panels render for a ranked group',()
 test('durations are shown in hours and minutes',()=>{
   const {a}=setup();
   assert.equal(a.fmtDuration(20),'不足 1 分钟');assert.equal(a.fmtDuration(600),'10 分钟');assert.equal(a.fmtDuration(12000),'3 小时 20 分');
+});
+
+
+test('concurrency: payload carries the shared per-team value and the probe suggests the largest safe option',()=>{
+  const {a,fields,$,context}=setup();
+  assert.equal(a.batchPayload().concurrency,4);
+  fields.concurrency.value='8';assert.equal(a.batchPayload().concurrency,8);
+  a.cs.submissions=[{id:'s1',team_name:'Alpha 队'},{id:'s2',team_name:'Beta 队'},{id:'s3',team_name:'Gamma 队'}];
+  const level=(n,ok,limited=0)=>({level:n,ok,limited,timeout:0,error:0,seconds:1});
+  a.cs.probe=[{submission_id:'s1',team_id:'a',stable:16,levels:[level(1,1),level(2,2),level(4,4),level(8,8),level(16,16)],note:'16 路同时请求均成功'},
+              {submission_id:'s2',team_id:'b',stable:4,levels:[level(1,1),level(2,2),level(4,4),level(8,5,3)],note:'4 路稳定；8 路出现限流或失败'},
+              {submission_id:'s3',team_id:'c',error:'API Key 无效'}];
+  a.renderProbe();
+  const html=$('#probe-result').innerHTML;
+  assert.match(html,/限流/);assert.match(html,/建议全队统一使用 <b>4 路/);assert.match(html,/probe-apply/);   // min stable of the ok teams is 4
+  assert.match(html,/1 支队伍检测失败/);assert.match(html,/API Key 无效/);
+  assert.equal(a.cs.probePick,4);
+  fields.concurrency.value='8';a.renderLaunchSummary();
+  assert.match($('#launch-summary').innerHTML,/高于检测结果（4 路）/);
+  assert.match($('#launch-summary').innerHTML,/队内并发/);
+  a.cs.probe=[{submission_id:'s1',team_id:'a',stable:0,levels:[level(1,0,1)],note:'单个请求也未成功'}];a.renderProbe();
+  assert.equal(a.cs.probePick,0);assert.doesNotMatch($('#probe-result').innerHTML,/probe-apply/);
 });

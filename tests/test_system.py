@@ -176,9 +176,33 @@ def test_error_requests_consume_budget_timeout_counts_wrong():
     assert r['status']=='timeout'
     req=httpx.Request('POST','https://example.com/v1/chat/completions')
     err=httpx.HTTPStatusError('secret body',request=req,response=httpx.Response(429,request=req))
-    r,records=execute(FakeClient([err,err,err]))
+    # HTTP 429 that never clears is an ordinary API error after the retry delays are used up.
+    import app.core.inference as inference
+    inference.BACKOFF_SECONDS=(0,0)
+    class AlwaysLimited:
+        async def complete(self,messages,timeout):raise err
+    try:
+        r,records=execute(AlwaysLimited())
+    finally:
+        inference.BACKOFF_SECONDS=(1,2,4,8,16,30,30,30)
     assert r['calls']==3 and r['status']=='api_error'
     assert records[-1]['http_status']==429 and 'secret body' not in str(records)
+
+
+def test_rate_limit_waits_inside_the_same_call_slot(monkeypatch):
+    import app.core.inference as inference
+    monkeypatch.setattr(inference,'BACKOFF_SECONDS',(0,0,0))
+    req=httpx.Request('POST','https://example.com/v1/chat/completions')
+    limited=httpx.HTTPStatusError('x',request=req,response=httpx.Response(429,request=req))
+    f=FakeClient([limited,limited,'A'])
+    r,records=execute(f,mode='single_pass',calls=1)
+    assert r['status']=='ok' and r['answer']==['A'] and r['calls']==1     # one call slot, not three
+    assert records[-1]['rate_limit_retries']==2 and records[-1]['status']=='ok'
+    assert len(f.messages)==3
+    # A retry-after header is honoured but capped; a non-429 error is never retried.
+    slow=httpx.HTTPStatusError('x',request=req,response=httpx.Response(503,request=req))
+    r,_=execute(FakeClient([slow]),mode='single_pass',calls=1)
+    assert r['status']=='api_error'
 
 
 @pytest.mark.parametrize('raw,kind,expected',[

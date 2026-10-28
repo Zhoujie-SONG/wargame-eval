@@ -1,6 +1,9 @@
 import asyncio
 import hashlib
 import json
+import os
+import time
+from collections import deque
 from datetime import datetime, timezone
 from uuid import uuid4
 from app.db import db, dumps, question_rows
@@ -132,13 +135,28 @@ def report(run_id, include_results=True):
     return value
 
 
+# Concurrency: teams of one batch run at the same time; inside a team up to `concurrency` questions
+# are in flight (the same number for every team, frozen in the run). One global cap protects this machine.
+DEFAULT_TEAM_CONCURRENCY = 4
+MAX_TEAM_CONCURRENCY = 16
+GLOBAL_CONCURRENCY = int(os.environ.get('WARGAME_GLOBAL_CONCURRENCY', '64'))
+
+
 class Runner:
     def __init__(self):
         self.queue = asyncio.Queue()
         self.task = None
+        self._slots = None
+
+    @property
+    def slots(self):
+        if self._slots is None:
+            self._slots = asyncio.Semaphore(GLOBAL_CONCURRENCY)
+        return self._slots
 
     async def start(self):
         self.queue = asyncio.Queue()
+        self._slots = None
         self.task = asyncio.create_task(self.worker())
 
     async def close(self):
@@ -159,18 +177,31 @@ class Runner:
         while True:
             packet = await self.queue.get()
             try:
-                for run_id in packet if isinstance(packet,tuple) else (packet,):
-                    try:
-                        await self.execute(run_id)
-                    except asyncio.CancelledError:
-                        with db() as c:
-                            c.execute("UPDATE runs SET status='interrupted',error='主办方进程停止，需统一重跑' WHERE id=?", (run_id,))
-                        raise
-                    except Exception as exc:
-                        with db() as c:
-                            c.execute("UPDATE runs SET status='infrastructure_error',error=? WHERE id=?", (f'主办方执行故障 ({type(exc).__name__})', run_id))
+                await self.run_packet(packet if isinstance(packet, tuple) else (packet,))
             finally:
                 self.queue.task_done()
+
+    async def run_packet(self, run_ids):
+        """All runs of one packet (a batch's teams) execute at the same time."""
+        tasks = [asyncio.create_task(self.guarded(run_id)) for run_id in run_ids]
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+
+    async def guarded(self, run_id):
+        try:
+            await self.execute(run_id)
+        except asyncio.CancelledError:
+            with db() as c:
+                c.execute("UPDATE runs SET status='interrupted',error='主办方进程停止，需统一重跑' WHERE id=? AND status IN ('queued','running','stopping')", (run_id,))
+            raise
+        except Exception as exc:
+            with db() as c:
+                c.execute("UPDATE runs SET status='infrastructure_error',error=? WHERE id=?", (f'主办方执行故障 ({type(exc).__name__})', run_id))
 
     async def execute(self, run_id):
         row, body = load_run(run_id)
@@ -185,16 +216,35 @@ class Runner:
             c.execute("UPDATE runs SET status='running',body=? WHERE id=?", (dumps(body), run_id))
             set_times(c,run_id,started=body['started_at'])
         client = make_client(body['model'], decrypt(row['secret']))
-        def should_stop():
+
+        def read_stop():
             with db() as c:
                 return bool(c.execute('SELECT stop FROM runs WHERE id=?', (run_id,)).fetchone()[0])
-        for q in body['questions']:
-            if should_stop():
-                break
+        stop = {'value': False, 'at': 0.0}
+
+        async def should_stop():
+            # Checked between model calls by every in-flight question; read the database at most twice a second.
+            if stop['value']:
+                return True
+            if time.monotonic()-stop['at'] >= 0.5:
+                stop['at'] = time.monotonic()
+                stop['value'] = await asyncio.to_thread(read_stop)
+            return stop['value']
+
+        def write_call(qid, record):
+            with db() as c:
+                c.execute('INSERT INTO calls(run_id,question_id,ordinal,body) VALUES(?,?,?,?) ON CONFLICT(run_id,question_id,ordinal) DO UPDATE SET body=excluded.body', (run_id, qid, record['ordinal'], dumps(record)))
+
+        def write_result(qid, value):
+            with db() as c:
+                c.execute('INSERT INTO results VALUES(?,?,?)', (run_id, qid, dumps(value)))
+
+        async def answer(q):
+            """One question; False if the run was stopped before it finished (nothing is recorded)."""
             qid = q['question_id']
-            def save_call(record):
-                with db() as c:
-                    c.execute('INSERT INTO calls(run_id,question_id,ordinal,body) VALUES(?,?,?,?) ON CONFLICT(run_id,question_id,ordinal) DO UPDATE SET body=excluded.body', (run_id, qid, record['ordinal'], dumps(record)))
+
+            async def save_call(record):
+                await asyncio.to_thread(write_call, qid, record)
             # The model path receives only these public fields; private QA stays here for scoring.
             public = {k: q[k] for k in ('input_text', 'question_type', 'options', 'image')}
             try:
@@ -203,18 +253,41 @@ class Runner:
                                     body['config']['competition']['timeout_per_question_seconds'],
                                     save_call, should_stop, body['early_stop'])
             except Stopped:
-                break
+                return False
             except (OSError, ValueError) as exc:
                 value = {'answer': None, 'status': 'infrastructure_error', 'error': f'本地资源故障 ({type(exc).__name__})', 'calls': 0}
             value['question_id'] = qid
             value['dimension'] = q['level']+'_'+q['role']
             value['correct'] = value['status']=='ok' and value['answer'] is not None and set(value['answer'])==set(q['gt_answer'])
-            with db() as c:
-                c.execute('INSERT INTO results VALUES(?,?,?)', (run_id, qid, dumps(value)))
-            await asyncio.sleep(0)  # yield between even instant Mock requests
+            await asyncio.to_thread(write_result, qid, value)
+            return True
+
+        pending = deque(body['questions'])
+
+        async def lane():
+            while pending and not await should_stop():
+                q = pending.popleft()
+                async with self.slots:
+                    if await should_stop() or not await answer(q):
+                        return
+                await asyncio.sleep(0)  # yield between even instant Mock requests
+
+        lanes = max(1, min(int(body.get('concurrency', 1)), MAX_TEAM_CONCURRENCY))
+        tasks = [asyncio.create_task(lane()) for _ in range(lanes)]
+        try:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+            for task in done:
+                task.result()  # re-raise the first failure
+            await asyncio.gather(*tasks)
+        except BaseException:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
         body['finished_at'] = now()
+        stopped = await asyncio.to_thread(read_stop)
         with db() as c:
-            c.execute('UPDATE runs SET status=?,body=? WHERE id=?', ('stopped' if should_stop() else 'completed', dumps(body), run_id))
+            c.execute('UPDATE runs SET status=?,body=? WHERE id=?', ('stopped' if stopped else 'completed', dumps(body), run_id))
             set_times(c,run_id,finished=body['finished_at'])
 
 

@@ -3,7 +3,7 @@ import json
 from typing import Literal
 from fastapi import APIRouter, UploadFile, File, Query
 from fastapi.responses import Response, JSONResponse
-from app.schemas import BatchConfig, BatchStart, BatchLaunch, ImportConfirm, OfficialRoster
+from app.schemas import BatchConfig, BatchStart, BatchLaunch, ImportConfirm, OfficialRoster, ConcurrencyProbe
 from app.services import submissions as subs
 from app.services import competition as comp
 from app.services.competition_report import chart_svg,render_html,DIMENSIONS,CHARTS
@@ -38,6 +38,12 @@ def submissions():return subs.list_submissions()
 def competition_status():
     from app.services.competition_status import compute
     return compute()
+
+
+@router.post('/competition/probe-concurrency')
+async def probe_concurrency(value:ConcurrencyProbe):
+    from app.services.concurrency_probe import probe_team
+    return await probe_team(value.submission_id)
 
 
 @router.get('/submissions/official-roster')

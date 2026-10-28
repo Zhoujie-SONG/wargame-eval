@@ -72,6 +72,7 @@ class BatchConfig(Strict):
     dimension: Literal['L2_main', 'L3_main', 'L1_sub', 'L2_sub'] | None = None
     question_ids: list[str] = Field(default_factory=list, max_length=2000)
     limit: int | None = Field(default=None, ge=1, le=10000)
+    concurrency: int = Field(default=4, ge=1, le=16, description='每队同时处理的题数；全队统一，写入冻结配置')
 
 
 class OfficialRoster(Strict):
@@ -85,3 +86,7 @@ class BatchStart(Strict):
 class BatchLaunch(BatchConfig):
     confirm_official: bool = False
     preview_fingerprint: str = Field(min_length=64, max_length=64)
+
+
+class ConcurrencyProbe(Strict):
+    submission_id: str

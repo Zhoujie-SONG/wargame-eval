@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import inspect
+import random
 import time
 from collections import Counter
 import httpx
@@ -8,6 +10,27 @@ from app.core.answer_parser import parse_answer
 
 class Stopped(Exception):
     pass
+
+
+# HTTP 429 means the provider refused the request before doing any work. Wait and resend inside the
+# same call slot: the wait does not use up the question's time limit or its call budget. After the last
+# delay a still-limited request is recorded as an ordinary API error (counted wrong, as before).
+BACKOFF_SECONDS = (1, 2, 4, 8, 16, 30, 30, 30)
+
+
+def retry_delay(response, attempt):
+    try:
+        asked = float(response.headers.get('retry-after', ''))
+    except (TypeError, ValueError):
+        asked = None
+    base = asked if asked is not None and asked >= 0 else BACKOFF_SECONDS[attempt]
+    return min(60.0, base) + (random.random() * 0.5 if base else 0)
+
+
+async def _maybe(fn, *args):
+    """Callbacks may be plain functions (tests) or coroutines (the runner keeps database writes off the loop)."""
+    value = fn(*args)
+    return await value if inspect.isawaitable(value) else value
 
 
 async def infer(public_question, prompt, model_client, mode, requested_calls, max_calls, timeout,
@@ -22,7 +45,7 @@ async def infer(public_question, prompt, model_client, mode, requested_calls, ma
     previous = None
     status = 'invalid_output'
     for ordinal in range(1, limit+1):
-        if should_stop():
+        if await _maybe(should_stop):
             raise Stopped()
         remaining = deadline-time.monotonic()
         if remaining <= 0:
@@ -30,15 +53,34 @@ async def infer(public_question, prompt, model_client, mode, requested_calls, ma
             break
         # All attempts, including HTTP errors/timeouts, consume a slot before sending.
         record = {'ordinal': ordinal, 'status': 'sending', 'elapsed_seconds': 0, 'output': '', 'usage': {}}
-        save_call(record)
+        await _maybe(save_call, record)
         started = time.monotonic()
+        limited_for = 0.0
         try:
-            result = await asyncio.wait_for(model_client.complete(copy.deepcopy(messages), remaining), remaining)
+            attempt = 0
+            while True:
+                remaining = deadline-time.monotonic()
+                try:
+                    result = await asyncio.wait_for(model_client.complete(copy.deepcopy(messages), remaining), remaining)
+                    break
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code != 429 or attempt >= len(BACKOFF_SECONDS):
+                        raise
+                    delay = retry_delay(exc.response, attempt)
+                    attempt += 1
+                    limited_for += delay
+                    deadline += delay  # waiting for the provider's rate limit is not the team's time
+                    record.update(rate_limit_retries=attempt, rate_limit_wait_seconds=limited_for)
+                    await asyncio.sleep(delay)
+                    if await _maybe(should_stop):
+                        raise Stopped()
             record.update(result, status='ok')
             answer = parse_answer(result['output'], public_question['question_type'], public_question['options'])
             record['answer'] = answer
             answers.append(answer)
             status = 'ok' if answer else 'invalid_output'
+        except Stopped:
+            raise
         except (asyncio.TimeoutError, httpx.TimeoutException):
             record.update(status='timeout', error='模型请求超时')
             answers.append(None)
@@ -54,8 +96,8 @@ async def infer(public_question, prompt, model_client, mode, requested_calls, ma
             answers.append(None)
             status = 'api_error'
         finally:
-            record['elapsed_seconds'] = time.monotonic()-started
-            save_call(record)
+            record['elapsed_seconds'] = time.monotonic()-started-limited_for
+            await _maybe(save_call, record)
             records.append(record)
         if status == 'timeout':
             break

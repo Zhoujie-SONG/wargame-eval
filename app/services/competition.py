@@ -35,16 +35,16 @@ def preview_batch(data):
     for index,s in enumerate(selected,1):
         try:
             run=RunConfig(name=s['name'],model_id=s['model_id'],prompt_id=s['prompt_id'],
-                          **data.model_dump(exclude={'request_key','name','submission_ids'}))
+                          **data.model_dump(exclude={'request_key','name','submission_ids','concurrency'}))
             body,secret=prepare_run(run,context)
         except ValueError as exc:raise ValueError(f'第 {index} 个方案：{exc}；本批没有启动任务') from None
-        body.update(team_id=s['team_id'],submission_version=s['version'])
+        body.update(team_id=s['team_id'],submission_version=s['version'],concurrency=data.concurrency)
         plans.append((s,body,secret))
     count=len(plans[0][1]['questions']);actual=1 if data.mode=='single_pass' else data.calls
     summary={'teams':len(plans),'questions_per_team':count,'total_qa':len(plans)*count,
              'max_requests':len(plans)*count*actual,
              'max_external_requests':sum(count*actual for _,b,_ in plans if b['model']['provider']!='mock'),
-             'mode':data.mode,'calls':actual,'official':data.official,'mode_label':mode_label(data.official),'budget':cfg['competition'],
+             'concurrency':data.concurrency,'mode':data.mode,'calls':actual,'official':data.official,'mode_label':mode_label(data.official),'budget':cfg['competition'],
              'real_images_complete':all(q['image'] and q['image']['real'] for _,b,_ in plans for q in b['questions']),
              'dataset_complete':count==sum(cfg['dataset']['expected_counts'].values()),
              'items':[{'team_id':s['team_id'],'team_name':s['name'],'submission_version':s['version'],
