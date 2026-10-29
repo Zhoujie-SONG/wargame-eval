@@ -79,10 +79,52 @@ $('#import-local').onclick=action(async()=>{
 });
 function importSummary(d){return `${d.changed?'导入完成':'数据一致，无需重复导入'}：${d.total} 道 QA，${d.mapped_frames} 个截图帧，全部题目已关联真实截图。`+(d.backup?` 更新前备份：data/raw/${d.backup}；${d.changed_inputs} 道题的输入文字有变化（含换行差异），历史任务快照保留。`:'')}
 $('#import-form').onsubmit=action(async()=>{const d=await api('/dataset/import','POST',new FormData($('#import-form')));notice('导入完成：'+d.total+' 题');await stats();await search()});
-function setImportMode(mode){document.querySelectorAll('[data-import-mode]').forEach(b=>b.classList.toggle('on',b.dataset.importMode===mode));document.querySelectorAll('[data-import-pane]').forEach(p=>{p.hidden=p.dataset.importPane!==mode});if(mode==='workspace')workspaceCheck().catch(()=>{})}
+function setImportMode(mode,automatic=false){if(!automatic)localImportState.modeChosen=true;document.querySelectorAll('[data-import-mode]').forEach(b=>{const selected=b.dataset.importMode===mode;b.classList.toggle('on',selected);b.setAttribute('aria-selected',String(selected))});document.querySelectorAll('[data-import-pane]').forEach(p=>{p.hidden=p.dataset.importPane!==mode});if(mode==='workspace')workspaceCheck().catch(()=>{});if(mode==='local-path')loadLocalSource()}
 async function workspaceCheck(){const box=$('#workspace-check');if(!box)return;const w=await api('/dataset/workspace');const row=(ok,name,note)=>'<div class="check"><span class="check-dot '+(ok?'ok':'bad')+'">'+(ok?'✓':'✗')+'</span><b>'+e(name)+'</b><span class="check-note">'+e(note)+'</span></div>';
  box.innerHTML=row(w.qa_found,'qa_all.json',w.qa_found?'项目根目录 images/ 内已找到':'未找到：请放入项目根目录 images/ 文件夹，或改用“手动选择文件”')+row(w.image_files>0,'截图',w.image_files>0?'images/ 内共 '+w.image_files+' 张':'images/ 内没有截图：请放入截图，或改用“手动选择文件”')}
 document.querySelectorAll('[data-import-mode]').forEach(b=>{b.onclick=()=>setImportMode(b.dataset.importMode)});
+const localImportState={sourceRequest:null,modeChosen:false,pending:false,started:false};
+async function loadLocalSource(){
+ if(localImportState.sourceRequest)return localImportState.sourceRequest;
+ localImportState.sourceRequest=(async()=>{
+  const sourceStatus=$('#local-source-status');
+  try{
+   const source=await api('/dataset/local-source'),f=$('#local-import-form');
+   for(const key of ['qa_path','images_dir'])if(!f.elements[key].value)f.elements[key].value=source[key]||'';
+   if(!localImportState.started)sourceStatus.textContent=source.qa_path&&source.images_dir?'已加载本地路径，可直接校验并导入。':'请填写 QA JSON 文件和截图文件夹的完整路径。';
+   if(source.qa_path&&source.images_dir&&!localImportState.modeChosen)setImportMode('local-path',true);
+  }catch(err){if(!localImportState.started){sourceStatus.className='form-help warn';sourceStatus.textContent='默认路径读取失败：'+err.message+'。可手动填写完整路径后导入。'}}
+ })();
+ return localImportState.sourceRequest;
+}
+async function importLocalDataset(ev){
+ ev.preventDefault();
+ if(localImportState.pending)return;
+ const f=$('#local-import-form'),button=$('#local-import-submit'),result=$('#dataset-import-result'),data=form('#local-import-form');
+ for(const key of ['qa_path','images_dir'])data[key]=data[key].trim();
+ localImportState.started=true;$('#local-source-status').textContent='';
+ if(!data.qa_path||!data.images_dir){result.textContent='请填写 QA JSON 文件和截图文件夹的完整路径。';return}
+ localImportState.pending=true;
+ const controls=[...f.querySelectorAll('input,button')];
+ controls.forEach(n=>n.disabled=true);f.setAttribute('aria-busy','true');button.textContent='正在校验并导入…';
+ result.textContent='正在读取本地 QA、匹配图片并校验完整性，请等待导入结果。';
+ let imported=false;
+ try{
+  const d=await api('/dataset/import-local','POST',data);imported=true;
+  const unchanged=d.already_imported||d.changed===false;
+  result.textContent=(unchanged?'数据已就绪（相同数据已导入）':'本地路径导入完成')+'：'+d.total+' 道 QA，'+d.mapped_frames+' 个截图帧，'+d.unique_images+' 张唯一图片。四维数量（L2 主 / L3 主 / L1 子 / L2 子）：'+['L2_main','L3_main','L1_sub','L2_sub'].map(k=>d.counts[k]).join(' / ')+'。';
+  state.offset=0;$('#question-detail').innerHTML='';
+  document.dispatchEvent(new CustomEvent('wargame:dataset-imported'));
+  await Promise.all([stats(),search(),loadImages()]);
+ }catch(err){
+  result.textContent=(imported?'数据已导入，但页面统计刷新失败，请刷新页面核对：':'导入失败，请检查路径、JSON 和图片后重试：')+err.message;
+  notice(result.textContent,true);
+ }finally{
+  localImportState.pending=false;controls.forEach(n=>n.disabled=false);f.removeAttribute('aria-busy');button.textContent='一键导入 QA 与截图';
+ }
+}
+$('#local-import-form').onsubmit=importLocalDataset;
+document.addEventListener('wargame:tab',ev=>{if(ev.detail==='dataset')loadLocalSource()});
 $('#import-manual').onsubmit=action(async()=>{const form=$('#import-manual'),result=$('#dataset-import-result'),button=form.querySelector('button');
  const files=[...$('#import-images').files];const data=new FormData();data.append('qa',form.elements.qa.files[0]);
  for(const f of files)data.append('images',f,f.webkitRelativePath||f.name);

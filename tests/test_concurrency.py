@@ -203,8 +203,10 @@ def make_sets_run(sets, concurrency):
 
 class SetProbe:
     """Records which questions are in flight and the order in which they start."""
-    def __init__(self):
+    def __init__(self, first_wave=1):
         self.active, self.started, self.peak, self.same_set = set(), [], 0, 0
+        self.first_wave = first_wave
+        self.wave_ready = asyncio.Event()
 
     async def complete(self, messages, timeout):
         qid = re.search(r'Q\[(s\d+-\w+)\]', str(messages)).group(1)
@@ -213,6 +215,9 @@ class SetProbe:
         self.active.add(qid)
         self.started.append(qid)
         self.peak = max(self.peak, len({a.split('-')[0] for a in self.active}))
+        if self.peak >= self.first_wave:
+            self.wave_ready.set()
+        await asyncio.wait_for(self.wave_ready.wait(), 2)
         await asyncio.sleep(.01)
         self.active.discard(qid)
         return {'output': 'A', 'usage': {}}
@@ -226,7 +231,8 @@ def test_question_sets_put_sub_questions_first_and_main_last():
 
 
 def test_only_different_sets_run_together_sub_questions_first(client, monkeypatch):
-    p = SetProbe()
+    # Hold the first wave until all four lanes enter, independent of database/host speed.
+    p = SetProbe(first_wave=4)
     monkeypatch.setattr(runs, 'make_client', lambda *a: p)
     rid = make_sets_run([3, 5, 2, 4, 6, 3], 4)
     asyncio.run(runs.Runner().execute(rid))
@@ -243,3 +249,28 @@ def test_one_lane_does_one_set_after_another(client, monkeypatch):
     rid = make_sets_run([2, 2, 2], 1)
     asyncio.run(runs.Runner().execute(rid))
     assert p.peak == 1 and [q.split('-')[0] for q in p.started] == ['s0']*3 + ['s1']*3 + ['s2']*3
+
+
+def test_lanes_recheck_remaining_sets_after_awaiting_stop(client, monkeypatch):
+    """Another lane may take the last set while the first lane reads the stop flag."""
+    p = SetProbe()
+    monkeypatch.setattr(runs, 'make_client', lambda *a: p)
+    original_to_thread = asyncio.to_thread
+    delayed = False
+
+    async def delayed_stop_read(func, *args, **kwargs):
+        nonlocal delayed
+        if func.__name__ == 'read_stop' and not delayed:
+            delayed = True
+            # Let the other lanes take both remaining sets before the first resumes.
+            async with asyncio.timeout(2):
+                while len(p.started) < 2:
+                    await asyncio.sleep(0)
+        return await original_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(asyncio, 'to_thread', delayed_stop_read)
+    rid = make_sets_run([0, 0], 4)
+    asyncio.run(runs.Runner().execute(rid))
+    assert delayed
+    assert status_and_results(rid) == ('completed', 2)
+    assert sorted(p.started) == ['s0-CORE', 's1-CORE']

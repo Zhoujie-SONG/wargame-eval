@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.4</title><link rel="icon" type="image/png" href="/static/favicon-transparent.png?v=1.4-transparent"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.4</title><link rel="icon" type="image/png" href="/static/favicon-transparent.png?v=1.4-transparent"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script><script src="/static/comparison.js" defer></script></head>
 <body>
 <aside><div class="brand"><div class="brand-heading"><img class="brand-logo" src="/static/favicon.png?v=1.4-logo" alt="" width="40" height="40"><span class="brand-title"><span>庙算杯</span><span>态势感知赛道</span></span></div><small>竞赛执行平台 · V1.4</small></div><nav aria-label="管理导航">
 <div class="nav-group" aria-labelledby="competition-nav"><h2 id="competition-nav">正式比赛</h2>
@@ -20,11 +20,12 @@
 <div id="flow-status" class="status-line" role="status" aria-live="polite" hidden></div>
 <section id="dataset" class="page">
 <div id="stats" class="cards"></div>
-<div class="panel" id="import-dataset"><h2>导入题库与截图</h2><p>选择一种方式即可。导入前先校验，通过才写入；更新已有题库时自动备份，历史任务的冻结题目与截图保留；运行或排队期间禁止更新。截图真实性由主办方负责确认。</p>
-<div class="seg" role="tablist" aria-label="导入方式"><button type="button" role="tab" class="on" data-import-mode="workspace">工作区一键导入</button><button type="button" role="tab" data-import-mode="manual">手动选择文件</button><button type="button" role="tab" data-import-mode="zip">兼容：原始 ZIP</button></div>
+<div class="panel" id="import-dataset"><h2>导入题库与截图</h2><p>选择一种方式即可。导入前先校验，通过才写入；工作区和手动上传支持备份后更新已有题库，本地路径与 ZIP 导入拒绝覆盖不同题库。历史任务的冻结题目与截图保留；运行或排队期间禁止更新。截图真实性由主办方负责确认。</p>
+<div class="seg" role="tablist" aria-label="导入方式"><button type="button" role="tab" class="on" data-import-mode="workspace">工作区一键导入</button><button type="button" role="tab" data-import-mode="manual">手动选择文件</button><button type="button" role="tab" data-import-mode="zip">兼容：原始 ZIP</button><button type="button" role="tab" data-import-mode="local-path">本地路径导入</button></div>
 <div data-import-pane="workspace"><div id="workspace-check" class="checks"></div><div class="row"><button id="import-local" type="button">一键导入工作区题库与截图</button></div></div>
 <div data-import-pane="manual" hidden><form id="import-manual" class="stack"><label>题库 JSON（qa_all.json）<input type="file" name="qa" accept=".json,application/json" required aria-label="题库 JSON"></label><label>截图文件夹（含全部 png / jpg / webp）<input type="file" id="import-images" name="images" webkitdirectory multiple required aria-label="截图文件夹"></label><p class="form-help" id="import-manual-hint">选择后由浏览器上传到本机服务；按 JSON 中的图片路径或“样本ID_样本ID_step步数_UUID”命名匹配截图。</p><div class="row"><button>校验并导入</button></div></form></div>
 <div data-import-pane="zip" hidden><p>只解析原始 Markdown，不修改题干、选项或 GT。重复导入相同文件安全；与已有数据不同时整批拒绝。ZIP 不包含自动截图关联，请使用下方“截图补充上传与关联”补充。</p><div class="row"><button id="bundled" type="button">导入工作区原始 ZIP</button><form id="import-form" class="row"><input type="file" name="file" accept=".zip" required aria-label="QA ZIP"><button>上传 ZIP</button></form></div></div>
+<div data-import-pane="local-path" hidden><form id="local-import-form" class="stack"><label>QA JSON 文件路径<input name="qa_path" required spellcheck="false" placeholder="例如 G:\数据集\data\qa_all.json" aria-describedby="local-import-help"></label><label>截图文件夹路径<input name="images_dir" required spellcheck="false" placeholder="例如 G:\数据集\images" aria-describedby="local-import-help"></label><p id="local-import-help" class="form-help">填写运行服务的电脑上的完整路径，直接读取原有数据，无需复制或重新上传。按 sample_id 与 replay.step 自动匹配截图（如 G01-01_G01-01_step0_UUID.png），子题共用所属主问题截图。完整校验后整批写入；相同数据可重复导入，不同题库拒绝覆盖。</p><p id="local-source-status" class="form-help" role="status" aria-live="polite">正在读取已保存的本地路径…</p><div class="row"><button id="local-import-submit" type="submit">一键导入 QA 与截图</button></div></form></div>
 <p id="dataset-import-result" role="status" aria-live="polite"></p></div>
 <details class="fold" id="image-fold"><summary><span class="chev" aria-hidden="true"></span><b>截图补充上传与关联</b><span class="hint">单张上传、按复盘 ID 与 step 关联、批量 JSON 映射</span><span class="tag" id="image-fold-tag"></span></summary><div class="fold-body"><p>同一复盘、同一 step 的所有题目共用截图。真实来源由管理员声明；Mock 图片不能转为真实图片。<a href="/api/images/missing.csv">下载缺失截图清单</a></p>
 <form id="image-form" class="row"><input type="file" name="file" accept="image/png,image/jpeg,image/webp" required aria-label="截图文件"><label class="inline"><input type="checkbox" name="real" checked>真实兵棋截图</label><button>上传图片</button></form>
@@ -67,6 +68,13 @@
 <div class="panel pane"><h2>本轮概览</h2><p>随左侧设置实时更新；最终数字以点击“开始正式测评”后的确认窗口为准。</p><div id="launch-summary"></div><h3>并发检测（可选）</h3><p class="sub">用每队的真实接口发少量请求（每队最多 31 次，会产生少量费用），找出各队稳定支持的并发数。</p><div class="row"><button type="button" id="probe-concurrency" class="secondary">检测各队可用并发</button><span id="probe-status" role="status" aria-live="polite"></span></div><div id="probe-result"></div></div>
 </div></section>
 <section id="analytics" class="page" hidden>
+<section id="run-comparison" class="panel" aria-labelledby="comparison-title"><div class="chart-head"><h2 id="comparison-title">自选评测对比</h2><span class="tag">跨批次 · 独立测评</span></div><p>选择 2–8 个已完成的评测记录，比较四维准确率与综合分。同名记录请核对运行时间、模型、版本和 ID；对比不会启动模型调用或改变正式排名。</p>
+<div class="row comparison-toolbar"><input id="comparison-search" type="search" placeholder="搜索名称、模型、版本、日期或 ID" aria-label="搜索评测记录"><button id="comparison-refresh" type="button" class="secondary">刷新列表</button><button id="comparison-select-visible" type="button" class="secondary" disabled>全选可见</button><button id="comparison-clear" type="button" class="secondary" disabled>清空选择</button></div>
+<p id="comparison-status" class="form-help" role="status" aria-live="polite">正在准备评测列表…</p><p id="comparison-storage-warning" class="warn" hidden></p>
+<div id="comparison-candidates" class="comparison-table-wrap"></div>
+<div class="row comparison-actions"><button id="comparison-generate" type="button" disabled>生成对比</button><span id="comparison-selection" class="form-help">请选择 2–8 个已完成的评测。</span></div>
+<p id="comparison-result-status" class="form-help" role="status" aria-live="polite"></p><div id="comparison-results" hidden></div></section>
+<h2 class="comparison-divider">批次监控与原始报告</h2>
 <div id="batch-progress" class="panel" hidden></div>
 <div id="curve-panel" class="panel" hidden></div>
 <details id="exception-panel" class="fold" hidden><summary><span class="chev" aria-hidden="true"></span><b>异常处理</b><span class="hint">停止 / 重跑 / 标记平台故障</span><span class="tag" id="exception-tag"></span></summary><div class="fold-body" id="exception-actions"></div></details>

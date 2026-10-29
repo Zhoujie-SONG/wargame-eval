@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.db import db, init_db, dumps, question_rows
 from app.settings import ROOT, HOME, CONFIG, settings
-from app.schemas import ModelConfig, PromptConfig, RunConfig, Limits, ImageMapping, InfraMark
+from app.schemas import ModelConfig, PromptConfig, RunConfig, Limits, ImageMapping, InfraMark, LocalDatasetImport
 from app.core.security import encrypt, credentials, validate_url, valid_env
 from app.core.prompt_manager import version
 from app.core.model_client import make_client
@@ -122,9 +122,33 @@ def import_bundled():
 
 
 @app.post('/api/dataset/import-local')
-def import_local_dataset():
-    from app.data.local_importer import import_local
-    return import_local(ROOT / 'images')
+def import_local_dataset(value: LocalDatasetImport | None = None):
+    if value is None:
+        from app.data.local_importer import import_local
+        return import_local(ROOT / 'images')
+    from app.data.importer import import_local
+    result = import_local(value.qa_path, value.images_dir)
+    source = HOME / 'local-source.json'
+    temporary = source.with_name(f'.local-source-{uuid4().hex}.tmp')
+    try:
+        temporary.write_text(dumps(value.model_dump()), encoding='utf-8')
+        os.replace(temporary, source)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return dict(result, real_image_questions=result['total'],
+                source_sha256=result['archive_sha256'],
+                changed=not result['already_imported'], changed_inputs=0, backup=None)
+
+
+@app.get('/api/dataset/local-source')
+def local_dataset_source():
+    source = HOME / 'local-source.json'
+    if source.is_file():
+        try:
+            return LocalDatasetImport.model_validate_json(source.read_text(encoding='utf-8')).model_dump()
+        except (ValueError, OSError):
+            pass
+    return {'qa_path': '', 'images_dir': ''}
 
 
 @app.get('/api/dataset/workspace')
@@ -396,8 +420,10 @@ def export(run_id: str, format: str):
 
 from app.api.competition import router as competition_router
 from app.api.entry_json import router as json_entry_router
+from app.api.run_comparison import router as run_comparison_router
 app.include_router(competition_router)
 app.include_router(json_entry_router)
+app.include_router(run_comparison_router)
 app.mount('/static',StaticFiles(directory=ROOT/'app/web'),name='static')
 
 

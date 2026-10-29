@@ -12,7 +12,11 @@ results/*
 !.env.example
 selected_240_six_groups*.zip
 data/raw/
+data/local-source.json
+data/*.log
+data/*.pid
 .publish-tools/
 /images/
 /selected_240_six_groups/
 /deepseek-participant-submission.json
+/config/deepseek-participant-submission*.json

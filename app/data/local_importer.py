@@ -4,96 +4,24 @@ import json
 import os
 import re
 import tempfile
-from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from app import settings as S
 from app.db import db, dumps
+from app.data.importer import _json_questions
 from app.services.images import validate_image
 
 
-def _text(value, label):
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f'{label} 必须是非空字符串')
-    return value
-
-
 def parse_json(content):
-    try:
-        source = json.loads(content.decode('utf-8-sig'))
-    except (UnicodeError, ValueError):
-        raise ValueError('qa_all.json 必须是有效的 UTF-8 JSON') from None
-    if not isinstance(source, list) or not source or len(source) > 10000:
-        raise ValueError('qa_all.json 顶层必须是非空题目数组，最多 10000 题')
-    expected = S.settings()['dataset']['expected_counts']
-    rows, samples, ids = [], defaultdict(list), set()
-    for item in source:
-        if not isinstance(item, dict):
-            raise ValueError('每道 QA 必须是 JSON 对象')
-        qid = _text(item.get('id'), '题目 id')
-        if qid in ids:
-            raise ValueError(f'{qid}: 重复题目 ID')
-        ids.add(qid)
-        sample = _text(item.get('sample_id'), f'{qid}: sample_id')
-        # sample_id is also a filename component, never a path.
-        if not re.fullmatch(r'[A-Za-z0-9-]+', sample):
-            raise ValueError(f'{qid}: sample_id 格式无效')
-        raw_role = item.get('role')
-        role = {'core': 'main', 'subquestion': 'sub'}.get(raw_role) if isinstance(raw_role, str) else None
-        level = item.get('level')
-        if not role or not isinstance(level, str) or level + '_' + role not in expected:
-            raise ValueError(f'{qid}: 不支持的层级或题目角色')
-        replay, image = item.get('replay'), item.get('image')
-        if not isinstance(replay, dict) or not isinstance(image, dict):
-            raise ValueError(f'{qid}: 缺少 replay / image 关联信息')
-        replay_id = _text(replay.get('id'), f'{qid}: replay.id')
-        step = replay.get('step')
-        if type(step) is not int or step < 0:
-            raise ValueError(f'{qid}: replay.step 必须是非负整数')
-        image_path = _text(image.get('path'), f'{qid}: image.path')
-        relative = PurePosixPath(image_path.replace('\\', '/'))
-        if (relative.is_absolute() or '..' in relative.parts or ':' in image_path
-                or relative.suffix.lower() not in ('.png', '.jpg', '.jpeg', '.webp')):
-            raise ValueError(f'{qid}: image.path 必须是 images 内的安全相对路径')
-        text = _text(item.get('model_input'), f'{qid}: model_input')
-        digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
-        provenance = item.get('source')
-        if not isinstance(provenance, dict) or provenance.get('model_input_sha256') != digest:
-            raise ValueError(f'{qid}: model_input_sha256 与原始输入不符')
-        options, answer = item.get('options'), item.get('answer')
-        if (not isinstance(options, dict) or not options
-                or any(not re.fullmatch('[A-H]', k) or not isinstance(v, str) for k, v in options.items())
-                or set(re.findall(r'^([A-H])[.．、]', text, re.M)) != set(options)):
-            raise ValueError(f'{qid}: 选项与 model_input 不一致')
-        labels = answer.get('labels') if isinstance(answer, dict) else None
-        kind = item.get('type')
-        if (not isinstance(labels, list) or not labels or any(not isinstance(v, str) for v in labels)
-                or len(set(labels)) != len(labels) or not set(labels) <= set(options)
-                or kind not in ('single_choice', 'multiple_choice')
-                or (kind == 'single_choice' and len(labels) != 1)):
-            raise ValueError(f'{qid}: 答案或题型无效')
-        row = dict(question_id=qid, parent_id=None, replay_id=replay_id, image_step=step,
-                   image_path=image_path, level=level, role=role, question_type=kind,
-                   input_text=text, input_sha256=digest, options=list(options), gt_answer=labels,
-                   reference_text=item.get('review_markdown', ''),
-                   source='qa_all.json', source_metadata=provenance)
-        rows.append(row)
-        samples[sample].append(row)
-    for sample, group in samples.items():
-        main = [q for q in group if q['role'] == 'main']
-        if len(main) != 1:
-            raise ValueError(f'{sample}: 必须且只能有一个主问题')
-        core = main[0]
-        for q in group:
-            if any(q[k] != core[k] for k in ('replay_id', 'image_step', 'image_path')):
-                raise ValueError(f'{q["question_id"]}: 同组 QA 的复盘、step 或图像路径不一致')
-            if q['role'] == 'sub':
-                q['parent_id'] = core['question_id']
-    counts = dict(Counter(q['level'] + '_' + q['role'] for q in rows))
-    if counts != expected:
-        raise ValueError(f'导入数量不符：实际 {counts}；未写入数据库')
-    return rows, samples, counts
+    """Keep all import entry points on the existing canonical question schema.
+
+    Reimporting the same JSON must preserve stored question bodies and dataset
+    digests, including the sample ID, source filename and private GT annotation.
+    The workspace importer still owns its update/backup policy and matching.
+    """
+    rows, samples, counts = _json_questions(content)
+    return rows, {sample: value['rows'] for sample, value in samples.items()}, counts
 
 
 def _screenshot(folder, sample, core):

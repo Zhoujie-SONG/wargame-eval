@@ -139,7 +139,7 @@ def test_update_backup_frozen_run_and_mock_execution(local_dataset):
     with db() as con:
         frozen = con.execute('SELECT body FROM runs WHERE id=?', (run_id,)).fetchone()[0]
     original = copy.deepcopy(rows)
-    rows[0]['model_input'] += '\n新的完整输入'
+    rows[0]['model_input'] = '新的完整输入\n' + rows[0]['model_input']
     rows[0]['source']['model_input_sha256'] = hashlib.sha256(rows[0]['model_input'].encode()).hexdigest()
     write_json(folder, rows)
     update = c.post('/api/dataset/import-local').json()

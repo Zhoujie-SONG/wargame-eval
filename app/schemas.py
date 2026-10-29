@@ -52,6 +52,11 @@ class ImageMapping(Strict):
     image_id: str
 
 
+class LocalDatasetImport(Strict):
+    qa_path: str = Field(min_length=1, max_length=4096)
+    images_dir: str = Field(min_length=1, max_length=4096)
+
+
 class InfraMark(Strict):
     question_ids: list[str] = Field(min_length=1)
     reason: str = Field(min_length=5, max_length=1000)
