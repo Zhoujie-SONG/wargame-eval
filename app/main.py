@@ -396,8 +396,10 @@ def export(run_id: str, format: str):
 
 from app.api.competition import router as competition_router
 from app.api.entry_json import router as json_entry_router
+from app.api.wardiag import router as wardiag_router
 app.include_router(competition_router)
 app.include_router(json_entry_router)
+app.include_router(wardiag_router)
 app.mount('/static',StaticFiles(directory=ROOT/'app/web'),name='static')
 
 

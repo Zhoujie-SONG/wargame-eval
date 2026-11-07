@@ -1,48 +1,98 @@
-/* WarDiag shares the host application's panels, cards and controls. */
-#wardiag .wardiag-heading-row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-#wardiag .wardiag-kicker{font-size:11px;letter-spacing:2px;color:#667f97}
-#wardiag .wardiag-intro h2{font-size:22px;line-height:1.5;color:#183e68;margin-bottom:12px}
-#wardiag .wardiag-lead{max-width:900px;font-size:15px;line-height:1.8;margin:0 0 10px}
-#wardiag .wardiag-intro-note{font-size:12px;margin:0;color:#64758a}
-#wardiag .wardiag-summary .card{padding:16px 20px}
-#wardiag .wardiag-summary .card>span{font-size:13px;color:#334e6d;font-weight:600}
-#wardiag .wardiag-summary .card>em{margin-top:4px;line-height:1.5}
-#wardiag .wardiag-task-selector{max-width:100%;margin-bottom:20px}
-#wardiag .wardiag-task-selector button{white-space:normal}
-#wardiag .wardiag-task-selector button:focus-visible{outline:3px solid #91b8dc;outline-offset:2px}
-#wardiag .wardiag-task-detail{border-top:1px solid var(--line,#e2e8f0);padding-top:2px}
-#wardiag .wardiag-task-detail h3{font-size:18px;color:#183e68;margin-top:18px}
-#wardiag .wardiag-task-purpose{margin:6px 0 18px}
-#wardiag .wardiag-task-facts{margin:0}
-#wardiag .wardiag-task-facts>div{display:grid;grid-template-columns:86px minmax(0,1fr);gap:16px;padding:13px 0;border-top:1px solid #e9edf2}
-#wardiag .wardiag-task-facts dt{font-size:12px;font-weight:600;color:#64758a}
-#wardiag .wardiag-task-facts dd{margin:0;line-height:1.8;overflow-wrap:anywhere}
-#wardiag .wardiag-example{margin:18px 0 0;padding:14px 18px;background:#f5f8fc;border:1px solid #e2e8f0;border-radius:8px}
-#wardiag .wardiag-example summary{font-weight:600}
-#wardiag .wardiag-example>p{margin:12px 0;color:#64758a}
-#wardiag .wardiag-example-columns{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px}
-#wardiag .wardiag-example-columns>div{min-width:0}
-#wardiag .wardiag-example h4{font-size:12px;color:#64758a;margin:0 0 8px;font-weight:600}
-#wardiag .wardiag-example pre{margin:0;background:#fff;border:1px solid #e2e8f0;border-radius:6px;line-height:1.8;max-height:420px;overflow-wrap:anywhere}
-#wardiag .wardiag-bottom{margin-bottom:20px}
-#wardiag .wardiag-process{list-style:none;counter-reset:wardiag-step;padding:0;margin:4px 0 0}
-#wardiag .wardiag-process li{position:relative;counter-increment:wardiag-step;padding:0 0 20px 42px;min-height:54px}
-#wardiag .wardiag-process li:not(:last-child)::after{content:"";position:absolute;left:13px;top:28px;bottom:3px;border-left:1px solid #d9e4ef}
-#wardiag .wardiag-process li::before{content:counter(wardiag-step);position:absolute;left:0;top:0;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#edf3fa;color:#345d8a;font-size:12px;font-weight:600}
-#wardiag .wardiag-process li:last-child{padding-bottom:0}
-#wardiag .wardiag-process strong{display:block;font-size:13px;color:#334e6d;line-height:1.8}
-#wardiag .wardiag-process li>span{display:block;font-size:12px;color:#64758a;line-height:1.8;margin-top:3px}
-#wardiag .wardiag-difficulties{gap:8px;margin:0 0 14px}
-#wardiag .wardiag-reference-note{padding-top:14px;border-top:1px solid #e9edf2;margin-bottom:0}
+/* WarDiag reuses the host application's panels, controls and blue-grey palette. */
+#wardiag .wardiag-heading-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+#wardiag .wardiag-heading-row h2{margin:0}
+#wardiag .wardiag-kicker{display:block;font-size:11px;letter-spacing:1px;color:#667f97;margin:0 0 7px}
+#wardiag .wardiag-intro>h2{font-size:22px;color:#183e68;margin:6px 0 12px}
+#wardiag .wardiag-intro>p{max-width:950px;margin-bottom:18px}
+#wardiag .wardiag-counts{display:flex;align-items:center;gap:32px;border-top:1px solid #e9edf2;padding-top:16px;flex-wrap:wrap}
+#wardiag .wardiag-counts>div{display:flex;gap:10px;align-items:baseline}
+#wardiag .wardiag-counts strong{font-size:28px;line-height:1.2;color:#183e68;font-variant-numeric:tabular-nums}
+#wardiag .wardiag-counts span{font-size:12px;color:#64758a}
+#wardiag .wardiag-counts>p{font-size:12px;margin:0 0 0 auto}
+#wardiag .wardiag-distribution{margin:18px 0 0}
+#wardiag .wardiag-distribution table{min-width:680px}
+#wardiag .wardiag-distribution th:first-child{min-width:120px}
+#wardiag .wardiag-filters{display:grid;grid-template-columns:minmax(170px,1fr) minmax(250px,2fr) auto;gap:14px;align-items:end}
+#wardiag .wardiag-filters>button{margin-bottom:8px}
+#wardiag .wardiag-empty{background:#f5f8fc;border:1px solid #e2e8f0;border-radius:8px;padding:24px;margin-top:18px}
+#wardiag .wardiag-empty strong{color:#334e6d;font-size:15px}
+#wardiag .wardiag-empty p{margin:8px 0 0;font-size:13px}
+#wardiag .wardiag-error{color:#a83730;background:#fff4f3;padding:12px;border-radius:6px}
+#wardiag .wardiag-pagination{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid #e9edf2;margin-top:16px;padding-top:14px}
+#wardiag .wardiag-pagination>label{display:flex;align-items:center;gap:10px;margin:0;min-width:220px;flex:1}
+#wardiag .wardiag-pagination select{min-width:130px;flex:1}
+#wardiag .wardiag-task-selector{display:flex;max-width:100%;margin:18px 0 0}
+#wardiag .wardiag-task-selector button{white-space:normal;flex:1}
+#wardiag button:focus-visible,#wardiag a:focus-visible,#wardiag summary:focus-visible{outline:3px solid #91b8dc;outline-offset:2px}
+#wardiag .wardiag-reading>.wardiag-heading-row{align-items:flex-start}
+#wardiag .wardiag-section-controls{margin:0;gap:6px}
+#wardiag .wardiag-section-controls button{font-size:12px;padding:6px 10px}
+#wardiag .wardiag-reading .chips{margin:0 0 10px}
+#wardiag .wardiag-reading .sub{font-size:13px;line-height:1.8}
+#wardiag .wardiag-question-section{margin:12px 0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
+#wardiag .wardiag-question-section>summary{padding:13px 16px;background:#f5f8fc;font-weight:600;color:#334e6d}
+#wardiag .wardiag-question-body{padding:16px 20px;overflow:auto;line-height:1.9;overflow-wrap:anywhere}
+#wardiag .wardiag-question-body p{color:#33465e;line-height:1.9;margin:0 0 14px}
+#wardiag .wardiag-question-body h1,#wardiag .wardiag-question-body h2,#wardiag .wardiag-question-body h3,#wardiag .wardiag-question-body h4{font-size:15px;color:#243f60;margin:16px 0 10px}
+#wardiag .wardiag-question-body table{width:max-content;min-width:100%;max-width:none;font-size:12px;margin:12px 0}
+#wardiag .wardiag-question-body th,#wardiag .wardiag-question-body td{max-width:440px;min-width:60px;line-height:1.7}
+#wardiag .wardiag-question-body pre{max-height:none;line-height:1.8}
+#wardiag .wardiag-question-body img{max-width:100%;height:auto}
+#wardiag .wardiag-question-body ul,#wardiag .wardiag-question-body ol{padding-left:24px}
+#wardiag .wardiag-reading-note{margin:18px 0 0;padding-top:12px;border-top:1px solid #e9edf2}
+#wardiag .wardiag-demo>h2{font-size:20px;color:#183e68;margin:8px 0 10px}
+#wardiag .wardiag-demo-flow{display:flex;align-items:center;gap:18px;margin:22px 0 16px}
+#wardiag .wardiag-demo-flow>div{flex:1;min-width:0;text-align:center;padding:18px 12px;border:1px solid #dfe6ee;border-radius:9px;background:#f8fafd}
+#wardiag .wardiag-demo-flow strong{display:block;font-size:17px;color:#334e6d}
+#wardiag .wardiag-demo-flow div>span{display:block;font-size:12px;color:#64758a;margin-top:5px}
+#wardiag .wardiag-demo-flow>.wardiag-demo-agent{background:#edf4fb;border-color:#bfd2e6}
+#wardiag .wardiag-flow-arrow{font-size:22px;color:#829bb5;flex:none}
+#wardiag .wardiag-toolbox{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:0 0 22px;padding:14px;border:1px dashed #c9d6e5;border-radius:8px}
+#wardiag .wardiag-agent-actions{display:grid;grid-template-columns:1fr 1fr;gap:24px;border-top:1px solid #e9edf2;padding-top:4px}
+#wardiag .wardiag-agent-actions p{margin-bottom:12px}
+#wardiag .wardiag-link-button{display:inline-block;background:#235d91;border:1px solid #235d91;color:#fff;border-radius:5px;padding:8px 15px;text-decoration:none;font-size:13px}
+#wardiag .wardiag-link-button[aria-disabled=true]{background:#edf2f7;border-color:#dce4ed;color:#7b8b9c;pointer-events:none}
+#wardiag .wardiag-eval-panel{margin:24px 0 0;padding-top:16px;border-top:1px solid #e9edf2}
+#wardiag .wardiag-eval-panel>summary{font-size:16px;font-weight:600;color:#334e6d}
+#wardiag .wardiag-eval-heading{margin:12px 0}
+#wardiag .wardiag-eval-heading p{margin:0;flex:1}
+#wardiag .wardiag-eval-notice{padding:10px 13px;background:#f2f6fb;border-radius:6px;margin-bottom:16px;color:#4a627c}
+#wardiag .wardiag-eval-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+#wardiag .wardiag-eval-step{min-width:0}
+#wardiag .wardiag-eval-step h3{margin-top:0}
+#wardiag .wardiag-eval-step input[type=file]{max-width:100%}
+#wardiag .wardiag-eval-step .grid2{gap:12px}
+#wardiag .wardiag-history{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:20px;padding-top:14px;border-top:1px solid #e9edf2}
+#wardiag .wardiag-history>label{flex:1;min-width:220px;margin:0}
+#wardiag .wardiag-run{margin-top:22px;padding-top:16px;border-top:1px solid #e9edf2}
+#wardiag .wardiag-run progress{margin-top:14px}
+#wardiag .wardiag-run>pre{max-height:420px;line-height:1.8}
+#wardiag .wardiag-score-metrics{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}
+#wardiag .wardiag-score-metrics>div{border:1px solid #dfe6ee;border-radius:6px;padding:9px 13px;min-width:110px}
+#wardiag .wardiag-score-metrics dt{color:#64758a;font-size:12px}
+#wardiag .wardiag-score-metrics dd{margin:4px 0 0;font-weight:600;color:#183e68}
+#wardiag #wardiag-comparison{margin-top:22px;padding-top:8px;border-top:1px solid #e9edf2}
+#wardiag #wardiag-comparison table{min-width:600px}
+@media(max-width:1000px){
+  #wardiag .wardiag-filters{grid-template-columns:minmax(140px,1fr) minmax(180px,2fr)}
+  #wardiag .wardiag-filters>button{grid-column:1/-1;justify-self:start;margin:0}
+}
 @media(max-width:700px){
-  #wardiag .wardiag-intro h2{font-size:19px}
-  #wardiag .wardiag-lead{font-size:14px}
-  #wardiag .wardiag-summary{gap:10px}
-  #wardiag .wardiag-summary .card{padding:14px}
-  #wardiag .wardiag-summary .card>em{font-size:11px}
-  #wardiag .wardiag-task-selector{display:flex}
-  #wardiag .wardiag-task-selector button{flex:1 0 auto;padding:8px 10px;font-size:12px}
-  #wardiag .wardiag-task-facts>div{grid-template-columns:1fr;gap:4px}
-  #wardiag .wardiag-example{padding:12px}
-  #wardiag .wardiag-example-columns{grid-template-columns:1fr;gap:16px}
+  #wardiag .wardiag-intro>h2{font-size:19px}
+  #wardiag .wardiag-counts{gap:18px}
+  #wardiag .wardiag-counts>p{margin:0;width:100%}
+  #wardiag .wardiag-filters{grid-template-columns:1fr}
+  #wardiag .wardiag-pagination{gap:8px}
+  #wardiag .wardiag-pagination>label{order:-1;flex-basis:100%}
+  #wardiag .wardiag-task-selector button{flex:1 0 42%;font-size:12px;padding:8px}
+  #wardiag .wardiag-question-body{padding:14px}
+  #wardiag .wardiag-demo-flow{gap:8px}
+  #wardiag .wardiag-demo-flow>div{padding:14px 6px}
+  #wardiag .wardiag-demo-flow strong{font-size:14px}
+  #wardiag .wardiag-demo-flow div>span{font-size:11px}
+  #wardiag .wardiag-flow-arrow{font-size:16px}
+  #wardiag .wardiag-agent-actions{grid-template-columns:1fr;gap:6px}
+  #wardiag .wardiag-eval-grid{grid-template-columns:1fr;gap:14px}
+  #wardiag .wardiag-history{gap:8px}
+  #wardiag .wardiag-history>label{flex-basis:100%}
 }
