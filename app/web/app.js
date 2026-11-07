@@ -1,7 +1,7 @@
 'use strict';
 const $ = s => document.querySelector(s);
 const e = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const labels={dataset:'数据集',models:'模型配置',prompts:'Prompt 与推理配置',create:'创建测评任务',monitor:'任务监控',reports:'测评报告与排行榜'};
+const labels={dataset:'数据集',models:'模型配置',prompts:'Prompt 与推理配置',create:'创建测评任务',monitor:'任务监控',reports:'测评报告与排行榜',wardiag:'WarDiag 兵棋决策评估'};
 let state={models:[],prompts:[],tab:'dataset',offset:0,total:0,selectedRun:null};
 function notice(text,error=false){const n=$('#notice');n.hidden=false;n.className=error?'error':'';n.textContent=text;clearTimeout(notice.timer);notice.timer=setTimeout(()=>n.hidden=true,12000)}
 async function api(url,method='GET',body){const options={method};if(body instanceof FormData)options.body=body;else if(body!==undefined){options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(body)}const r=await fetch('/api'+url,options);const data=await r.json();if(!r.ok){const err=Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail||data));err.status=r.status;err.data=data;throw err}return data}

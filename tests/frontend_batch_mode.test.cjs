@@ -55,7 +55,7 @@ const plan={fingerprint:'f'.repeat(64),teams:2,questions_per_team:1279,max_reque
 function answerDialog($,answer){const d=$('#official-start-dialog');let close;d.addEventListener=(event,fn)=>close=fn;d.showModal=()=>{d.returnValue=answer;close()}}
 
 test('sidebar navigation opens every page at the top without an anchor jump, including repeat clicks',async()=>{
-  const tabs=['dataset','submissions','batches','analytics','models','prompts','create','monitor'];
+  const tabs=['dataset','submissions','batches','analytics','models','prompts','create','monitor','wardiag'];
   const pages=tabs.map(id=>({id,hidden:true})),nodes=new Map(),events=[];
   let hash='#batches',scrollY=900,anchorJumps=0;
   const context={state:{},labels:Object.fromEntries(tabs.map(id=>[id,id])),
@@ -81,8 +81,8 @@ test('sidebar navigation opens every page at the top without an anchor jump, inc
 
 test('group numbering remains independent; formal form has one primary action and no test controls',()=>{
   const html=fs.readFileSync('app/web/index.html','utf8'),nav=html.match(/<nav[\s\S]*?<\/nav>/)[0],form=html.match(/<form id="batch-form"[\s\S]*?<\/form>/)[0];
-  assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['dataset','submissions','batches','analytics','models','prompts','create','monitor']);
-  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04','01','02','03','04']);
+  assert.deepEqual([...nav.matchAll(/data-tab="(.*?)"/g)].map(x=>x[1]),['dataset','submissions','batches','analytics','wardiag','models','prompts','create','monitor']);
+  assert.deepEqual([...nav.matchAll(/<button[^>]*>(\d{2})/g)].map(x=>x[1]),['01','02','03','04','01','01','02','03','04']);
   assert.match(nav,/class="flow-nav"/);
   for(const key of ['dataset','submissions','batches','analytics'])assert.match(html,new RegExp('<section id="'+key+'" class="page"'));
   assert.doesNotMatch(html,/id="flow-stepper"|id="flow-home"/);assert.match(html,/id="flow-status"/);assert.match(html,/src="\/static\/flow\.js"/);

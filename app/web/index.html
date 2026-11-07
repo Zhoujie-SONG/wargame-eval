@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.4</title><link rel="icon" type="image/png" href="/static/favicon-transparent.png?v=1.4-transparent"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>庙算杯态势感知赛道 · V1.4</title><link rel="icon" type="image/png" href="/static/favicon-transparent.png?v=1.4-transparent"><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/wardiag.css"><script src="/static/app.js" defer></script><script src="/static/competition.js" defer></script><script src="/static/flow.js" defer></script><script src="/static/wardiag.js" defer></script></head>
 <body>
 <aside><div class="brand"><div class="brand-heading"><img class="brand-logo" src="/static/favicon.png?v=1.4-logo" alt="" width="40" height="40"><span class="brand-title"><span>庙算杯</span><span>态势感知赛道</span></span></div><small>竞赛执行平台 · V1.4</small></div><nav aria-label="管理导航">
 <div class="nav-group" aria-labelledby="competition-nav"><h2 id="competition-nav">正式比赛</h2>
@@ -10,6 +10,8 @@
 <button type="button" data-tab="batches">03　设置并启动<span class="dot" aria-hidden="true">○</span></button>
 <button type="button" data-tab="analytics">04　监控与结果<span class="dot" aria-hidden="true">○</span></button>
 </div></div>
+<div class="nav-group" aria-labelledby="project-nav"><h2 id="project-nav">项目展示</h2>
+<button type="button" data-tab="wardiag">01　WarDiag 兵棋决策</button></div>
 <div class="nav-group" aria-labelledby="developer-nav"><h2 id="developer-nav">开发者选项</h2>
 <button data-tab="models">01　模型配置</button>
 <button data-tab="prompts">02　Prompt 与推理</button>
@@ -79,6 +81,7 @@
 </div>
 <details class="fold" id="history-panel"><summary><span class="chev" aria-hidden="true"></span><b>历史批次</b><span class="hint">切换查看或分析以往批次</span></summary><div class="fold-body"><div id="batch-list"></div></div></details>
 </section>
+<section id="wardiag" class="page" hidden aria-label="WarDiag 兵棋决策评估"><div id="wardiag-content"></div></section>
 <section id="run-detail" class="panel" hidden></section>
 <footer>V1.4 · 本地单管理员原型。聚合代理内部调用不可观测，平台预算只限制可见的请求。正式比赛前请准备真实截图与有效模型凭据。</footer>
 </main><dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">请确认</h2><p id="confirm-text"></p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认</button></form></dialog>
