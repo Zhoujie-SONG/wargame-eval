@@ -54,7 +54,7 @@ async function switchTab(tab){
  state.tab=tab;
  document.querySelectorAll('.page').forEach(n=>n.hidden=n.id!==tab);
  document.querySelectorAll('nav button').forEach(n=>n.classList.toggle('active',n.dataset.tab===tab));
- $('#title').textContent=labels[tab];$('#run-detail').hidden=true;state.selectedRun=null;
+ $('#title').textContent=labels[tab];const crumb=$('.eyebrow');if(crumb)crumb.textContent=({dataset:'正式比赛 · 第 1 步 / 共 4 步',submissions:'正式比赛 · 第 2 步 / 共 4 步',batches:'正式比赛 · 第 3 步 / 共 4 步',analytics:'正式比赛 · 第 4 步 / 共 4 步'})[tab]||'开发者选项';$('#run-detail').hidden=true;state.selectedRun=null;
  // Keep the URL without the browser scrolling to the section's matching ID.
  if(location.hash!=='#'+tab)history.pushState(null,'','#'+tab);
  window.scrollTo({top:0,left:0,behavior:'instant'});

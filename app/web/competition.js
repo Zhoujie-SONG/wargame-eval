@@ -26,7 +26,7 @@ function renderProbe(){const box=$('#probe-result');if(!box||!cs.probe)return;co
   +(bad||!pick?'<p class="roster-warning" role="alert">'+(bad?bad+' 支队伍检测失败；':'')+(pick?'':'有队伍连 1 路都不稳定；')+'请先处理这些队伍的接口问题再开赛。</p>':'')
   +(pick?'<p>各队稳定并发的最小值是 <b>'+min+' 路</b>，建议全队统一使用 <b>'+pick+' 路</b>。 <button type="button" class="secondary" id="probe-apply">采用 '+pick+' 路</button></p>':'')}
 function renderLaunchSummary(){const f=$('#batch-form');if(!f||!f.elements)return;const mode=f.elements.mode.value,calls=mode==='single_pass'?1:(+f.elements.calls.value||1),teams=cs.selected.size;
- const rows=[['参赛队伍',teams+' 支（在“参赛名单”调整）'],['每队题数','1,279 道 QA'],['推理策略',MODE_NAMES[mode]||mode],['每题最大调用',calls+' 次'],['队内并发',concurrencyNow()+' 套题同时做（全队统一，各队同时开始；套内先子问题后主问题）'],['最大 API 请求数',teams?fmt(teams)+' × 1,279 × '+calls+' = '+fmt(teams*1279*calls):'—']];
+ const rows=[['参赛队伍',teams+' 支（在“参赛名单”调整）'],['每队题数','1,279 道 QA'],['推理策略',MODE_NAMES[mode]||mode],['每题最大调用',calls+' 次'],['队内并发',concurrencyNow()+' 套同时进行'],['最大 API 请求数',teams?fmt(teams)+' × 1,279 × '+calls+' = '+fmt(teams*1279*calls):'—']];
  $('#launch-summary').innerHTML='<dl class="kv">'+rows.map(([k,v])=>'<div><dt>'+e(k)+'</dt><dd>'+e(v)+'</dd></div>').join('')+'</dl>'+(cs.probePick&&concurrencyNow()>cs.probePick?'<p class="roster-warning">所选并发高于检测结果（'+cs.probePick+' 路），可能触发限流；限流会自动等待重试，但会拖慢比赛。</p>':'')}
 function askConfirm(title,text){const dialog=$('#confirm-dialog');$('#confirm-title').textContent=title;$('#confirm-text').textContent=text;
  return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true});dialog.returnValue='cancel';dialog.showModal()})}
@@ -159,12 +159,12 @@ async function loadCurves(id,idx,total,force=false){const panel=$('#curve-panel'
  const color=d=>TEAM_COLORS[idx[String(d.team_id)]||0];
  panel.hidden=false;panel.innerHTML='<h2>准确率随已答题数变化</h2><p class="sub">曲线越平稳，当前准确率越可信；已答题数少时（左侧）波动大属正常。</p><div class="legend">'+series.map(d=>'<span><i class="sw" data-c="'+e(color(d))+'"></i>'+e(d.name)+'</span>').join('')+'</div>'+curveSvg(series,color,total);
  panel.querySelectorAll('.sw[data-c]').forEach(n=>{n.className='sw tc'+TEAM_COLORS.indexOf(n.dataset.c)})}
-function curveSvg(series,color,total){const W=1000,H=250,L=46,R=12,T=10,B=30;const max=Math.max(total||0,...series.map(d=>d.curve[d.curve.length-1][0]),1);
+function curveSvg(series,color,total){const W=1000,H=250,L=46,R=28,T=10,B=30;const max=Math.max(total||0,...series.map(d=>d.curve[d.curve.length-1][0]),1);
  const vals=series.flatMap(d=>d.curve.filter(p=>p[0]>=20).map(p=>p[1]));const all=vals.length?vals:series.flatMap(d=>d.curve.map(p=>p[1]));
  let lo=Math.max(0,Math.floor((Math.min(...all)-.05)*20)/20),hi=Math.min(1,Math.ceil((Math.max(...all)+.05)*20)/20);if(hi-lo<.2){hi=Math.min(1,lo+.2);lo=Math.max(0,hi-.2)}
  const x=i=>L+(W-L-R)*i/max,y=v=>T+(H-T-B)*(1-(Math.min(hi,Math.max(lo,v))-lo)/(hi-lo));
- let g='';for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v).toFixed(1)+'" y2="'+y(v).toFixed(1)+'" stroke="#e5ebf2"/><text x="'+(L-8)+'" y="'+(y(v)+4).toFixed(1)+'" font-size="11" fill="#7b8ca3" text-anchor="end">'+Math.round(v*100)+'%</text>'}
- for(let k=0;k<=4;k++){const v=Math.round(max*k/4);g+='<text x="'+x(v).toFixed(1)+'" y="'+(H-8)+'" font-size="11" fill="#7b8ca3" text-anchor="middle">'+fmt(v)+'</text>'}
+ let g='';for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v).toFixed(1)+'" y2="'+y(v).toFixed(1)+'" stroke="#e6e9ef"/><text x="'+(L-8)+'" y="'+(y(v)+4).toFixed(1)+'" font-size="11" fill="#6b7487" text-anchor="end">'+Math.round(v*100)+'%</text>'}
+ for(let k=0;k<=4;k++){const v=Math.round(max*k/4);g+='<text x="'+x(v).toFixed(1)+'" y="'+(H-8)+'" font-size="11" fill="#6b7487" text-anchor="middle">'+fmt(v)+'</text>'}
  for(const d of series){const c=color(d),pts=d.curve.map((p,k)=>(k?'L':'M')+x(p[0]).toFixed(1)+','+y(p[1]).toFixed(1)).join(' '),last=d.curve[d.curve.length-1];
   g+='<path d="'+pts+'" fill="none" stroke="'+c+'" stroke-width="2" stroke-linejoin="round"/><circle cx="'+x(last[0]).toFixed(1)+'" cy="'+y(last[1]).toFixed(1)+'" r="4" fill="'+c+'"/>'}
  return '<svg class="curve-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="各队准确率随已答题数变化">'+g+'</svg>'}
@@ -177,12 +177,12 @@ async function loadAnalytics(rebuild=false){const id=$('#analytics-batch').value
  $('#competition-summary').innerHTML='<p class="result-note">'+e(modeLabel(data.official))+' · 完成队伍 '+data.finished+' / '+data.teams+' · 已完成 QA '+fmt(data.qa_completed)+' / '+fmt(data.qa_total)+' · 实际请求 '+fmt(data.actual_calls)+'。'+e(data.scope_note)+'</p>';
  $('#competition-groups').innerHTML=data.groups.map(g=>renderGroup(g,id,params)).join('')+(data.groups.length?'':'<div class="panel">暂无完整可排名成绩。未完成队伍不进入最终排名。</div>')+(data.excluded.length?'<div class="panel"><h3>未进入最终排名</h3>'+data.excluded.map(x=>'<p>'+e(x.name+' · '+x.status+' · '+x.reason)+'</p>').join('')+'</div>':'');}
 function chartPanel(id,g,params,chart){const q=new URLSearchParams(params);q.set('group',g.id);const src='/api/evaluation-batches/'+id+'/charts/'+chart+'.svg?'+q,title=charts[chart];
- return '<div class="panel chart-card"><div class="chart-head"><h3>'+e(title)+'</h3><span class="row"><a download href="'+e(src)+'">导出 SVG</a><button class="secondary" data-png="'+e(src)+'" data-chart-name="'+e(chart)+'">导出 PNG</button></span></div><img class="competition-chart" src="'+e(src)+'" alt="'+e(title+' · '+g.kind)+'"></div>'}
+ return '<div class="panel chart-card"><div class="chart-head"><span class="row"><a class="btn o" download href="'+e(src)+'">导出 SVG</a><button class="btn o" data-png="'+e(src)+'" data-chart-name="'+e(chart)+'">导出 PNG</button></span></div><img class="competition-chart" src="'+e(src)+'" alt="'+e(title+' · '+g.kind)+'"></div>'}
 function renderGroup(g,id,params){
  const cells=g.entries.flatMap(r=>dims.map(k=>r.dimensions[k].accuracy)).filter(v=>v!==null),lo=Math.min(...cells),hi=Math.max(...cells);
- const heat=v=>v===null?'heat-na':'heat-'+(hi>lo?Math.min(5,Math.floor((v-lo)/(hi-lo)*6)):3),medal=['🥇','🥈','🥉'];
+ const heat=v=>v===null?'heat-na':'heat-'+(hi>lo?Math.min(5,Math.floor((v-lo)/(hi-lo)*6)):3);
  const podium=g.entries.slice(0,3).map((r,i)=>'<div class="podium pc'+i+'"><small>第 '+(i+1)+' 名</small><strong>'+e(r.name)+'</strong><span class="score">'+r.weighted_score.toFixed(2)+'</span><em>综合分 · '+e(r.model.model_id)+'</em></div>').join('');
- const rows=g.entries.map((r,i)=>[String(r.rank)+(medal[i]?' '+medal[i]:''),'<i class="sw tc'+(i%6)+'"></i><b>'+e(r.name)+'</b><br><span class="muted small">'+e(r.model.model_id)+'</span>',
+ const rows=g.entries.map((r,i)=>['<span class="num rank">'+String(r.rank).padStart(2,'0')+'</span>','<i class="sw tc'+(i%6)+'"></i><b>'+e(r.name)+'</b><br><span class="muted small">'+e(r.model.model_id)+'</span>',
    bar('tc'+(i%6),r.weighted_score,100)+'<b class="num">'+r.weighted_score.toFixed(2)+'</b>',
    ...dims.map(k=>'<div class="heat '+heat(r.dimensions[k].accuracy)+'">'+pct1(r.dimensions[k].accuracy)+'</div>'),
    r.mean_question_seconds===null?'—':r.mean_question_seconds.toFixed(1)+' 秒',r.mean_calls===null||r.mean_calls===undefined?'—':r.mean_calls.toFixed(1),`<button data-run="${e(r.run_id)}">查看</button>`]);

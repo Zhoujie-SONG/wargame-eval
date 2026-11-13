@@ -283,6 +283,8 @@ class Runner:
         async def lane():
             # One lane works on one set at a time, so questions in flight always come from different sets.
             while pending and not await should_stop():
+                if not pending:  # another lane took the last set while we checked the stop flag
+                    return
                 for q in pending.popleft():
                     async with self.slots:
                         if await should_stop() or not await answer(q):

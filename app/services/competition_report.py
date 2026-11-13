@@ -32,13 +32,13 @@ class SVG:
         self.height=height
         self.parts=[f'<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="{height}" viewBox="0 0 1100 {height}" role="img" aria-label="{esc(title)}">',
                     '<rect width="1100" height="100%" fill="white"/>',
-                    '<g font-family="Microsoft YaHei,Noto Sans CJK SC,Arial,sans-serif" fill="#24344a">']
-        self.text(30,35,title,22);self.text(30,65,subtitle,13,'#61748b')
-    def text(self,x,y,text,size=13,color='#24344a',anchor='start'):
+                    '<g font-family="IBM Plex Sans,PingFang SC,Microsoft YaHei,Noto Sans CJK SC,Arial,sans-serif" fill="#111827">']
+        self.text(30,36,title,20);self.text(30,64,subtitle,12,'#6b7487')
+    def text(self,x,y,text,size=13,color='#111827',anchor='start'):
         self.parts.append(f'<text x="{x:.3f}" y="{y:.3f}" font-size="{size}" fill="{color}" text-anchor="{anchor}">{esc(text)}</text>')
-    def line(self,x1,y1,x2,y2,color='#dbe3ec'):
+    def line(self,x1,y1,x2,y2,color='#e6e9ef'):
         self.parts.append(f'<line x1="{x1:.3f}" y1="{y1:.3f}" x2="{x2:.3f}" y2="{y2:.3f}" stroke="{color}"/>')
-    def label(self,x,y,value,width=28,color='#24344a'):
+    def label(self,x,y,value,width=28,color='#111827'):
         lines=wrap_label(value,width)
         for n,line in enumerate(lines[:3]):
             self.text(x,y+n*17,line+('…' if n==2 and len(lines)>3 else ''),12,color)
@@ -68,7 +68,7 @@ def chart_svg(group,chart):
                     yy=y+j*25;v=row['dimensions'][key]['accuracy']
                     s.text(x-8,yy+13,label,11,anchor='end')
                     if v is not None:s.parts.append(f'<rect x="{x}" y="{yy}" width="{w*v:.4f}" height="17" fill="{DIM_COLORS[j]}"/>')
-                    s.text(x+w*(v or 0)+6,yy+13,'缺失' if v is None else number(v*100)+'%',11)
+                    s.text(x+w*(v or 0)+6,yy+13,'缺失' if v is None else number(v*100,1)+'%',11)
         return s.finish()
     if chart=='radar':
         shown=rows[:4]
@@ -82,9 +82,9 @@ def chart_svg(group,chart):
         for tick in range(4):
             value=low+(100-low)*(tick+1)/4;t=(tick+1)/4
             pts=[(cx,cy-radius*t),(cx+radius*t,cy),(cx,cy+radius*t),(cx-radius*t,cy)]
-            s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in pts)+'" fill="none" stroke="#dbe3ec"/>')
-            s.text(cx+5,cy-radius*t-3,f'{value:.0f}%',10,'#7b8ca3')
-        s.text(cx+5,cy+14,f'中心 {low}%',10,'#7b8ca3')
+            s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in pts)+'" fill="none" stroke="#e6e9ef"/>')
+            s.text(cx+5,cy-radius*t-3,f'{value:.0f}%',10,'#6b7487')
+        s.text(cx+5,cy+14,f'中心 {low}%',10,'#6b7487')
         for x1,y1 in [(cx,cy-radius),(cx+radius,cy),(cx,cy+radius),(cx-radius,cy)]:s.line(cx,cy,x1,y1)
         positions=[(cx,cy-radius-16),(cx+radius+14,cy+5),(cx,cy+radius+28),(cx-radius-14,cy+5)]
         anchors=['middle','start','middle','end']
@@ -93,7 +93,7 @@ def chart_svg(group,chart):
             vals=complete[index];color=team_color(index);y0=130+index*100
             s.parts.append(f'<rect x="690" y="{y0-12}" width="12" height="12" rx="3" fill="{color}"/>')
             s.text(710,y0,row['name'],15)
-            s.text(710,y0+22,'  ·  '.join(f'{label[:4]} '+('缺失' if v is None else number(v*100)+'%') for (_,label),v in zip(DIMENSIONS,vals)),12,'#61748b')
+            s.text(710,y0+22,'  ·  '.join(f'{label[:4]} '+('缺失' if v is None else number(v*100,1)+'%') for (_,label),v in zip(DIMENSIONS,vals)),12,'#6b7487')
             if any(v is None for v in vals):
                 s.text(710,y0+40,'缺失维度不补零，不绘制该队多边形',11,'#9a6400');continue
             points=[(cx,cy-scale(vals[0])),(cx+scale(vals[1]),cy),(cx,cy+scale(vals[2])),(cx-scale(vals[3]),cy)]
@@ -103,17 +103,30 @@ def chart_svg(group,chart):
     s=SVG(CHARTS[chart],540+len(rows)*60,subtitle)
     x,y,w,h=110,105,880,360
     usable=[r for r in rows if r['mean_question_seconds'] is not None]
-    maximum=max([r['mean_question_seconds'] for r in usable]+[.001])*1.15
-    for tick in range(6):
-        xx=x+w*tick/5;s.line(xx,y,xx,y+h);s.text(xx,y+h+25,number(maximum*tick/5,4),11,anchor='middle')
-        yy=y+h-h*tick/5;s.line(x,yy,x+w,yy);s.text(x-12,yy+4,tick*20,12,anchor='end')
-    s.text(x,y-15,'综合得分 / 100 分',13);s.text(x+w,y+h+50,'平均单题推理耗时 / 秒',13,anchor='end')
+    secs=[r['mean_question_seconds'] for r in usable] or [1.0]
+    scores=[r['weighted_score'] for r in usable] or [50.0]
+    # Zoom to the data so teams do not pile up in one corner; ticks are round numbers.
+    def nice(span):
+        raw=span/5;mag=10**math.floor(math.log10(raw)) if raw>0 else 1
+        return next(m*mag for m in (1,2,2.5,5,10) if m*mag>=raw)
+    pad=max((max(secs)-min(secs))*.25,max(secs)*.15,.5)
+    sx=nice(max(secs)-min(secs)+2*pad);xlo=max(0,math.floor((min(secs)-pad)/sx)*sx);xhi=math.ceil((max(secs)+pad)/sx)*sx
+    ylo=max(0,math.floor((min(scores)-10)/10)*10);yhi=min(100,math.ceil((max(scores)+10)/10)*10)
+    if yhi-ylo<20:ylo=max(0,yhi-20)
+    xticks=[];t=xlo
+    while t<=xhi+1e-9:xticks.append(t);t+=sx
+    digits=0 if sx>=1 else 1
+    for tick in xticks:
+        xx=x+w*(tick-xlo)/(xhi-xlo);s.line(xx,y,xx,y+h);s.text(xx,y+h+24,number(tick,digits),11,'#6b7487','middle')
+    for k in range(int((yhi-ylo)//10)+1):
+        v=ylo+k*10;yy=y+h-h*(v-ylo)/(yhi-ylo);s.line(x,yy,x+w,yy);s.text(x-12,yy+4,v,11,'#6b7487','end')
+    s.text(x,y-16,'综合得分',12,'#4b5565');s.text(x+w,y+h+48,'平均单题推理耗时 / 秒',12,'#4b5565',anchor='end')
     label_boxes=[]
     def intersects(a,b):return a[0]<b[2]+3 and a[2]+3>b[0] and a[1]<b[3]+3 and a[3]+3>b[1]
     for i,row in enumerate(usable,1):
-        xx=x+w*row['mean_question_seconds']/maximum;yy=y+h-h*row['weighted_score']/100
+        xx=x+w*(row['mean_question_seconds']-xlo)/(xhi-xlo);yy=y+h-h*(row['weighted_score']-ylo)/(yhi-ylo)
         radius=5+min(row['mean_calls'],10)*2
-        tip=f'{row["name"]}；得分 {number(row["weighted_score"])}；单题 {number(row["mean_question_seconds"],4)} 秒；平均调用 {number(row["mean_calls"])} 次'
+        tip=f'{row["name"]}；得分 {number(row["weighted_score"])}；单题 {number(row["mean_question_seconds"],1)} 秒；平均调用 {number(row["mean_calls"])} 次'
         s.parts.append(f'<circle cx="{xx}" cy="{yy}" r="{radius}" fill="{team_color(i-1)}" fill-opacity="0.35" stroke="{team_color(i-1)}" stroke-width="2"><title>{esc(tip)}</title></circle>')
         offsets=[(radius+5,-10),(radius+5,22),(-radius-22,-10),(-radius-22,22),(0,-35),(0,45),(35,-30),(-40,40),(55,10)]
         for dx,dy in offsets:

@@ -14,13 +14,13 @@
 <button data-tab="models">01　模型配置</button>
 <button data-tab="prompts">02　Prompt 与推理</button>
 <button data-tab="create">03　创建测评任务</button>
-<button data-tab="monitor">04　任务监控</button></div></nav><p class="aside-note">主办方本地管理原型<br>Mock 成绩仅用于联调</p></aside>
-<main><header><div><span class="eyebrow">WARGAME EVALUATION</span><h1 id="title">数据集</h1></div><span id="health" class="badge">连接中</span></header>
+<button data-tab="monitor">04　任务监控</button></div></nav><p class="aside-note">主办方本地版<br>Mock 成绩只用于联调</p></aside>
+<main><header><div><span class="eyebrow">正式比赛 · 第 1 步 / 共 4 步</span><h1 id="title">数据集</h1></div><span id="health" class="badge">连接中</span></header>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <div id="flow-status" class="status-line" role="status" aria-live="polite" hidden></div>
 <section id="dataset" class="page">
 <div id="stats" class="cards"></div>
-<div class="panel" id="import-dataset"><h2>导入题库与截图</h2><p>选择一种方式即可。导入前先校验，通过才写入；更新已有题库时自动备份，历史任务的冻结题目与截图保留；运行或排队期间禁止更新。截图真实性由主办方负责确认。</p>
+<div class="panel" id="import-dataset"><h2>导入题库与截图</h2><p class="sub">任选一种方式。先校验、通过才写入；更新时自动备份，历史任务不受影响；比赛进行中不能更新</p>
 <div class="seg" role="tablist" aria-label="导入方式"><button type="button" role="tab" class="on" data-import-mode="workspace">工作区一键导入</button><button type="button" role="tab" data-import-mode="manual">手动选择文件</button><button type="button" role="tab" data-import-mode="zip">兼容：原始 ZIP</button></div>
 <div data-import-pane="workspace"><div id="workspace-check" class="checks"></div><div class="row"><button id="import-local" type="button">一键导入工作区题库与截图</button></div></div>
 <div data-import-pane="manual" hidden><form id="import-manual" class="stack"><label>题库 JSON（qa_all.json）<input type="file" name="qa" accept=".json,application/json" required aria-label="题库 JSON"></label><label>截图文件夹（含全部 png / jpg / webp）<input type="file" id="import-images" name="images" webkitdirectory multiple required aria-label="截图文件夹"></label><p class="form-help" id="import-manual-hint">选择后由浏览器上传到本机服务；按 JSON 中的图片路径或“样本ID_样本ID_step步数_UUID”命名匹配截图。</p><div class="row"><button>校验并导入</button></div></form></div>
@@ -59,12 +59,12 @@
 <div class="row"><a href="/api/submissions/template?format=xlsx">Excel 模板</a><a href="/api/submissions/template?format=csv">CSV 模板</a></div>
 <form id="submission-upload" class="row"><input name="file" type="file" accept=".xlsx,.csv" required aria-label="参赛配置文件"><button>解析并预览</button></form><div id="import-preview"></div><button id="confirm-import" disabled>确认整批导入</button></div></details>
 </details>
-<div class="panel" id="roster-panel"><h2>参赛名单</h2><p>每支队伍只能选一个版本，默认每队最新版本；导入新版本后会自动切换，请在这里核对。</p><div class="row"><input id="team-filter" placeholder="按队伍或模型搜索" aria-label="搜索队伍"><button id="reset-roster-latest" class="secondary">全部选最新版本</button><button id="clear-teams" class="secondary">清空名单</button></div><div id="batch-submissions"></div><p class="form-help" id="submission-selection-status"></p></div></section>
+<div class="panel" id="roster-panel"><h2>参赛名单</h2><p class="sub">每队选一个版本，默认最新；导入新版本后会自动切换，请在这里核对</p><div class="row"><input id="team-filter" placeholder="搜索队伍或模型" aria-label="搜索队伍"><button id="reset-roster-latest" class="secondary">全部选最新版本</button><button id="clear-teams" class="secondary">清空名单</button></div><div id="batch-submissions"></div><p class="form-help" id="submission-selection-status"></p></div></section>
 <section id="batches" class="page" hidden>
 <div class="split">
-<div class="panel pane"><h2>比赛设置</h2><p>全量 1,279 道 QA · 四个维度 · 仅真实模型与真实截图。开发调试请使用“开发者选项”。</p>
-<form id="batch-form" class="stack"><label>比赛 / 批次名称<input name="name" value="兵棋多模态智能体竞赛 · 正式测评" required maxlength="100"></label><label>统一推理模式<select name="mode"><option value="single_pass">Single-pass · 单次推理</option><option value="self_refine" selected>Self-refine · 多轮检查修正</option><option value="majority_vote">Majority-vote · 独立采样投票</option></select></label><label>每题最大调用次数<select name="calls" required aria-describedby="batch-calls-help"></select></label><label>队内并发（每队同时做几套题）<select name="concurrency" aria-describedby="batch-conc-help"><option value="1">1 套（最保守）</option><option value="2">2 套</option><option value="4" selected>4 套（推荐）</option><option value="8">8 套</option><option value="16">16 套</option></select></label><p id="batch-conc-help" class="form-help">同时做的永远是不同套题（一张图配一个主问题和若干子问题）；同一套内部按“子问题 → 主问题”依次做，不并行。所有队伍使用同一个并发数以保证公平，各队同时开始。建议先在右侧“并发检测”确认各队接口能承受的并发。遇到限流（HTTP 429）自动等待重试，不计错、不占调用次数和答题时间。</p><label class="inline"><input name="early_stop" type="checkbox">Self-refine 稳定答案提前结束（最多按所选次数调用）</label><p id="batch-calls-help" class="form-help"></p><div class="row"><button id="start-official-batch">开始正式测评</button><span id="start-gate-reason" class="gate-reason"></span><span id="batch-launch-status" role="status" aria-live="polite"></span></div></form></div>
-<div class="panel pane"><h2>本轮概览</h2><p>随左侧设置实时更新；最终数字以点击“开始正式测评”后的确认窗口为准。</p><div id="launch-summary"></div><h3>并发检测（可选）</h3><p class="sub">用每队的真实接口发少量请求（每队最多 31 次，会产生少量费用），找出各队稳定支持的并发数。</p><div class="row"><button type="button" id="probe-concurrency" class="secondary">检测各队可用并发</button><span id="probe-status" role="status" aria-live="polite"></span></div><div id="probe-result"></div></div>
+<div class="panel pane"><h2>比赛设置</h2><p class="sub">全量 1,279 道 QA · 四个维度 · 只用真实模型和真实截图</p>
+<form id="batch-form" class="stack"><label>比赛 / 批次名称<input name="name" value="兵棋多模态智能体竞赛 · 正式测评" required maxlength="100"></label><label>统一推理模式<select name="mode"><option value="single_pass">Single-pass · 单次推理</option><option value="self_refine" selected>Self-refine · 多轮检查修正</option><option value="majority_vote">Majority-vote · 独立采样投票</option></select></label><label>每题最大调用次数<select name="calls" required aria-describedby="batch-calls-help"></select></label><label>队内并发（每队同时做几套题）<select name="concurrency" aria-describedby="batch-conc-help"><option value="1">1 套（最保守）</option><option value="2">2 套</option><option value="4" selected>4 套（推荐）</option><option value="8">8 套</option><option value="16">16 套</option></select></label><p id="batch-conc-help" class="form-help">一套 = 一张图配一个主问题和几个子问题。不同套题之间并行；同一套内先做子问题、最后做主问题，不并行。各队用同一个值、同时开始。遇到限流（HTTP 429）自动等待重试，不计错。</p><label class="inline"><input name="early_stop" type="checkbox">Self-refine 稳定答案提前结束（最多按所选次数调用）</label><p id="batch-calls-help" class="form-help"></p><div class="row"><button id="start-official-batch">开始正式测评</button><span id="start-gate-reason" class="gate-reason"></span><span id="batch-launch-status" role="status" aria-live="polite"></span></div></form></div>
+<div class="panel pane"><h2>本轮概览</h2><p class="sub">随左侧设置更新，以启动前的确认窗口为准</p><div id="launch-summary"></div><h3>并发检测（可选）</h3><p class="sub">用每队的真实接口发少量请求（每队最多 31 次，会产生少量费用），找出各队稳定支持的并发数。</p><div class="row"><button type="button" id="probe-concurrency" class="secondary">检测各队可用并发</button><span id="probe-status" role="status" aria-live="polite"></span></div><div id="probe-result"></div></div>
 </div></section>
 <section id="analytics" class="page" hidden>
 <div id="batch-progress" class="panel" hidden></div>
@@ -80,7 +80,7 @@
 <details class="fold" id="history-panel"><summary><span class="chev" aria-hidden="true"></span><b>历史批次</b><span class="hint">切换查看或分析以往批次</span></summary><div class="fold-body"><div id="batch-list"></div></div></details>
 </section>
 <section id="run-detail" class="panel" hidden></section>
-<footer>V1.4 · 本地单管理员原型。聚合代理内部调用不可观测，平台预算只限制可见的请求。正式比赛前请准备真实截图与有效模型凭据。</footer>
+<footer>V1.4 · 本地单管理员版。聚合代理内部的调用平台看不到，调用上限只管平台发出的请求。</footer>
 </main><dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">请确认</h2><p id="confirm-text"></p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认</button></form></dialog>
 <dialog id="official-start-dialog" aria-labelledby="official-start-title"><h2 id="official-start-title">确认启动正式比赛</h2><div id="official-start-summary"></div><p class="warn">确认后将自动创建并启动所有参赛队伍的正式测评任务，真实模型 API 调用可能产生费用。</p><form method="dialog" class="row"><button value="cancel" class="secondary">取消</button><button value="confirm">确认并开始测评</button></form></dialog>
 </body></html>
