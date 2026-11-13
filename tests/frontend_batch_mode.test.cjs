@@ -292,7 +292,7 @@ test('monitor page: red teams first, error breakdown, remaining time, results hi
   const html=$('#batch-progress').innerHTML;
   const at=n=>html.indexOf('<b>'+n+'</b>');
   assert.ok(at('Bad')<at('Run')&&at('Run')<at('Wait')&&at('Wait')<at('Done'));          // red → running → queued → completed
-  assert.match(html,/3（接口 2 \/ 超时 1）/);assert.match(html,/预计剩余<\/small><strong>6 小时 32 分/);        // (2558-600) × 7200 ÷ 600 = 23,496 s
+  assert.match(html,/3（接口 2 \/ 超时 1）/);assert.match(html,/预计剩余<\/small><strong[^>]*>6 小时 32 分/);        // (2558-600) × 7200 ÷ 600 = 23,496 s
   assert.equal($('#results-view').hidden,true);assert.equal(a.cs.batchRunning,true);
   assert.match($('#exception-actions').innerHTML,/data-flow-stop-batch/);assert.match($('#exception-actions').innerHTML,/data-flow-rerun=\\?"Bad/);
   assert.match($('#exception-actions').innerHTML,/data-flow-stop=\\?"Run/);assert.equal($('#exception-panel').open,true);

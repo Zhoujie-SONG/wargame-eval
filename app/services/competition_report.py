@@ -6,10 +6,12 @@ import unicodedata
 from app.services.competition import analytics
 
 DIMENSIONS=[('L2_main','L2 主问题'),('L3_main','L3 主问题'),('L1_sub','L1 子问题'),('L2_sub','L2 子问题')]
-# Team colors: calm, distinguishable (also for color-blind readers), reused by the web page.
-TEAM_COLORS=['#2f6fa8','#e08a3c','#3a9d7a','#8e6bbf','#d0586a','#6b7f95']
+# Team colors follow the Apple system palette (light): blue, orange, green, purple, pink, teal. Reused by the web page.
+TEAM_COLORS=['#007aff','#ff9500','#34c759','#af52de','#ff2d55','#5ac8fa']
 # Dimension colors: one blue family, darker for main questions, lighter for sub-questions.
-DIM_COLORS=['#1f5a8f','#4a8cc2','#7fb3dc','#b4d4ee']
+DIM_COLORS=['#0a4fbf','#007aff','#5aa9ff','#a9d0ff']
+INK,INK2,INK3,GRID,TRACK,PANEL='#1c1c1e','#48484a','#6c6c70','#e9e9ee','#f2f2f7','#f7f7fa'
+FONT='-apple-system,SF Pro Text,PingFang SC,Inter,Noto Sans CJK SC,Microsoft YaHei,Arial,sans-serif'
 def team_color(i):return TEAM_COLORS[i%len(TEAM_COLORS)]
 CHARTS={'ranking':'综合分排行榜','dimensions':'四维准确率对比','radar':'能力雷达图','efficiency':'推理效率分析'}
 
@@ -28,20 +30,27 @@ def wrap_label(text,width):
 
 
 class SVG:
+    """Small drawing helper. Looks like Swift Charts: quiet hairline grid, capsule marks, semibold values."""
     def __init__(self,title,height,subtitle):
         self.height=height
+        defs=''.join(f'<linearGradient id="t{i}" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="{c}" stop-opacity=".72"/><stop offset="1" stop-color="{c}"/></linearGradient>' for i,c in enumerate(TEAM_COLORS))
+        defs+=''.join(f'<linearGradient id="d{i}" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="{c}" stop-opacity=".78"/><stop offset="1" stop-color="{c}"/></linearGradient>' for i,c in enumerate(DIM_COLORS))
         self.parts=[f'<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="{height}" viewBox="0 0 1100 {height}" role="img" aria-label="{esc(title)}">',
-                    '<rect width="1100" height="100%" fill="white"/>',
-                    '<g font-family="IBM Plex Sans,PingFang SC,Microsoft YaHei,Noto Sans CJK SC,Arial,sans-serif" fill="#111827">']
-        self.text(30,36,title,20);self.text(30,64,subtitle,12,'#6b7487')
-    def text(self,x,y,text,size=13,color='#111827',anchor='start'):
-        self.parts.append(f'<text x="{x:.3f}" y="{y:.3f}" font-size="{size}" fill="{color}" text-anchor="{anchor}">{esc(text)}</text>')
-    def line(self,x1,y1,x2,y2,color='#e6e9ef'):
-        self.parts.append(f'<line x1="{x1:.3f}" y1="{y1:.3f}" x2="{x2:.3f}" y2="{y2:.3f}" stroke="{color}"/>')
-    def label(self,x,y,value,width=28,color='#111827'):
+                    f'<defs>{defs}</defs><rect width="1100" height="100%" fill="#ffffff"/>',
+                    f'<g font-family="{FONT}" fill="{INK}">']
+        self.text(32,40,title,18,INK,weight=600);self.text(32,62,subtitle,12,INK3)
+    def text(self,x,y,text,size=13,color=INK,anchor='start',weight=400):
+        w=f' font-weight="{weight}"' if weight!=400 else ''
+        self.parts.append(f'<text x="{x:.3f}" y="{y:.3f}" font-size="{size}" fill="{color}" text-anchor="{anchor}"{w}>{esc(text)}</text>')
+    def line(self,x1,y1,x2,y2,color=GRID,dash=''):
+        d=f' stroke-dasharray="{dash}"' if dash else ''
+        self.parts.append(f'<line x1="{x1:.3f}" y1="{y1:.3f}" x2="{x2:.3f}" y2="{y2:.3f}" stroke="{color}"{d}/>')
+    def capsule(self,x,y,w,h,fill,opacity=1):
+        w=max(w,h);self.parts.append(f'<rect x="{x:.3f}" y="{y:.3f}" width="{w:.3f}" height="{h}" rx="{h/2}" fill="{fill}" fill-opacity="{opacity}"/>')
+    def label(self,x,y,value,width=28,color=INK,size=14,weight=600):
         lines=wrap_label(value,width)
         for n,line in enumerate(lines[:3]):
-            self.text(x,y+n*17,line+('…' if n==2 and len(lines)>3 else ''),12,color)
+            self.text(x,y+n*18,line+('…' if n==2 and len(lines)>3 else ''),size,color,weight=weight)
         self.parts.append('<title>'+esc(value)+'</title>')
     def finish(self):return ''.join(self.parts)+'</g></svg>'
 
@@ -51,29 +60,31 @@ def chart_svg(group,chart):
     rows=group['top_entries'];kind={'mock':'Mock 联调（非正式）','partial_test':'真实模型测试（非正式）','official':'正式全量'}[group['kind']]
     subtitle=f'{kind} · {group["mode"]} · 每题最多 {group["calls"]} 次 · {len(rows)} 支队伍 · 组 {group["id"]}'
     if chart in ('ranking','dimensions'):
-        step=85 if chart=='ranking' else 126
-        s=SVG(CHARTS[chart],150+step*len(rows),subtitle)
-        x,w=285,735
-        for tick in (0,20,40,60,80,100):
-            xx=x+w*tick/100;s.line(xx,100,xx,s.height-45);s.text(xx,95,tick,12,anchor='middle')
-        s.text(x+w,s.height-12,'综合得分 / 100 分' if chart=='ranking' else '准确率 / %',12,anchor='end')
+        step=64 if chart=='ranking' else 132
+        s=SVG(CHARTS[chart],140+step*len(rows),subtitle)
+        x,w=300,690
+        for tick in (0,25,50,75,100):
+            xx=x+w*tick/100;s.line(xx,96,xx,s.height-44);s.text(xx,s.height-22,tick,11,INK3,'middle')
+        s.text(x+w+40,s.height-22,'综合得分 / 100 分' if chart=='ranking' else '准确率 / %',11,INK3,'end')
         for i,row in enumerate(rows):
-            y=118+i*step;s.label(30,y+14,f'{row["rank"]}. {row["name"]}')
+            y=112+i*step
             if chart=='ranking':
-                score=row['weighted_score']
-                s.parts.append(f'<rect x="{x}" y="{y}" width="{w*score/100:.4f}" height="28" fill="{team_color(i)}"/>')
-                s.text(x+w*score/100+7,y+20,number(score),12)
+                score=row['weighted_score'];s.text(32,y+14,f'{row["rank"]:02d}',13,INK3)
+                s.label(64,y+14,row['name'],24)
+                s.capsule(x,y,w,18,TRACK);s.capsule(x,y,w*score/100,18,f'url(#t{i%len(TEAM_COLORS)})')
+                s.text(x+max(w*score/100,18)+12,y+14,number(score),14,INK,weight=600)
             else:
+                s.text(32,y+14,f'{row["rank"]:02d}',13,INK3);s.label(64,y+14,row['name'],24)
                 for j,(key,label) in enumerate(DIMENSIONS):
-                    yy=y+j*25;v=row['dimensions'][key]['accuracy']
-                    s.text(x-8,yy+13,label,11,anchor='end')
-                    if v is not None:s.parts.append(f'<rect x="{x}" y="{yy}" width="{w*v:.4f}" height="17" fill="{DIM_COLORS[j]}"/>')
-                    s.text(x+w*(v or 0)+6,yy+13,'缺失' if v is None else number(v*100,1)+'%',11)
+                    yy=y+j*26;v=row['dimensions'][key]['accuracy']
+                    s.text(x-14,yy+12,label,11,INK3,'end');s.capsule(x,yy,w,14,TRACK)
+                    if v is not None:s.capsule(x,yy,w*v,14,f'url(#d{j})')
+                    s.text(x+max(w*(v or 0),14)+12,yy+12,'缺失' if v is None else number(v*100,1)+'%',12,INK,weight=600)
         return s.finish()
     if chart=='radar':
         shown=rows[:4]
         s=SVG(CHARTS[chart],560,subtitle+f' · 展示当前筛选中排名前 {len(shown)} 支队伍')
-        cx,cy,radius=330,310,185
+        cx,cy,radius=330,320,180
         complete=[[row['dimensions'][key]['accuracy'] for key,_ in DIMENSIONS] for row in shown]
         known=[v for vals in complete for v in vals if v is not None]
         # Zoom the axis to the data so close teams stay readable; the center value is printed on the chart.
@@ -82,32 +93,35 @@ def chart_svg(group,chart):
         for tick in range(4):
             value=low+(100-low)*(tick+1)/4;t=(tick+1)/4
             pts=[(cx,cy-radius*t),(cx+radius*t,cy),(cx,cy+radius*t),(cx-radius*t,cy)]
-            s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in pts)+'" fill="none" stroke="#e6e9ef"/>')
-            s.text(cx+5,cy-radius*t-3,f'{value:.0f}%',10,'#6b7487')
-        s.text(cx+5,cy+14,f'中心 {low}%',10,'#6b7487')
-        for x1,y1 in [(cx,cy-radius),(cx+radius,cy),(cx,cy+radius),(cx-radius,cy)]:s.line(cx,cy,x1,y1)
-        positions=[(cx,cy-radius-16),(cx+radius+14,cy+5),(cx,cy+radius+28),(cx-radius-14,cy+5)]
+            fill=PANEL if tick==3 else 'none';dash='' if tick==3 else ' stroke-dasharray="3 5"'
+            s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in pts)+f'" fill="{fill}" stroke="{GRID}" stroke-linejoin="round"{dash}/>')
+            s.parts.append(f'<text x="{cx+6}" y="{cy-radius*t-4}" font-size="10" fill="{INK3}" stroke="#fff" stroke-width="3" paint-order="stroke">{value:.0f}%</text>')
+        s.parts.append(f'<text x="{cx+6}" y="{cy+16}" font-size="10" fill="{INK3}" stroke="#fff" stroke-width="3" paint-order="stroke">中心 {low}%</text>')
+        for x1,y1 in [(cx,cy-radius),(cx+radius,cy),(cx,cy+radius),(cx-radius,cy)]:s.line(cx,cy,x1,y1,GRID)
+        positions=[(cx,cy-radius-18),(cx+radius+18,cy+5),(cx,cy+radius+32),(cx-radius-18,cy+5)]
         anchors=['middle','start','middle','end']
-        for (_,label),(x,y),anchor in zip(DIMENSIONS,positions,anchors):s.text(x,y,label,14,anchor=anchor)
+        for (_,label),(x,y),anchor in zip(DIMENSIONS,positions,anchors):s.text(x,y,label,14,INK,anchor,600)
         for index,row in enumerate(shown):
-            vals=complete[index];color=team_color(index);y0=130+index*100
-            s.parts.append(f'<rect x="690" y="{y0-12}" width="12" height="12" rx="3" fill="{color}"/>')
-            s.text(710,y0,row['name'],15)
-            s.text(710,y0+22,'  ·  '.join(f'{label[:4]} '+('缺失' if v is None else number(v*100,1)+'%') for (_,label),v in zip(DIMENSIONS,vals)),12,'#6b7487')
+            vals=complete[index];color=team_color(index);y0=132+index*104
+            s.parts.append(f'<rect x="676" y="{y0-32}" width="392" height="88" rx="18" fill="{PANEL}"/>')
+            s.parts.append(f'<circle cx="702" cy="{y0-8}" r="6" fill="{color}"/>')
+            s.text(718,y0-3,row['name'],15,INK,weight=600)
+            for k,((_,label),v) in enumerate(zip(DIMENSIONS,vals)):
+                xx=700+k*92;s.text(xx,y0+20,label[:4],11,INK3);s.text(xx,y0+40,'缺失' if v is None else number(v*100,1)+'%',14,INK,weight=600)
             if any(v is None for v in vals):
-                s.text(710,y0+40,'缺失维度不补零，不绘制该队多边形',11,'#9a6400');continue
+                s.text(718,y0+58,'缺失维度不补零，不绘制该队多边形',11,'#9a6400');continue
             points=[(cx,cy-scale(vals[0])),(cx+scale(vals[1]),cy),(cx,cy+scale(vals[2])),(cx-scale(vals[3]),cy)]
-            s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in points)+f'" fill="{color}" fill-opacity="0.12" stroke="{color}" stroke-width="2.5" stroke-linejoin="round"/>')
-            for x,y in points:s.parts.append(f'<circle cx="{x}" cy="{y}" r="4" fill="{color}" stroke="white" stroke-width="1.5"/>')
+            s.parts.append('<polygon points="'+' '.join(f'{x},{y}' for x,y in points)+f'" fill="{color}" fill-opacity="0.16" stroke="{color}" stroke-width="2.5" stroke-linejoin="round"/>')
+            for x,y in points:s.parts.append(f'<circle cx="{x}" cy="{y}" r="5" fill="#fff" stroke="{color}" stroke-width="2.5"/>')
         return s.finish()
-    s=SVG(CHARTS[chart],540+len(rows)*60,subtitle)
-    x,y,w,h=110,105,880,360
+    s=SVG(CHARTS[chart],560+len(rows)*54,subtitle)
+    x,y,w,h=70,110,900,360
     usable=[r for r in rows if r['mean_question_seconds'] is not None]
     secs=[r['mean_question_seconds'] for r in usable] or [1.0]
     scores=[r['weighted_score'] for r in usable] or [50.0]
     # Zoom to the data so teams do not pile up in one corner; ticks are round numbers.
     def nice(span):
-        raw=span/5;mag=10**math.floor(math.log10(raw)) if raw>0 else 1
+        raw=max(span,1e-9)/5;mag=10**math.floor(math.log10(raw))
         return next(m*mag for m in (1,2,2.5,5,10) if m*mag>=raw)
     pad=max((max(secs)-min(secs))*.25,max(secs)*.15,.5)
     sx=nice(max(secs)-min(secs)+2*pad);xlo=max(0,math.floor((min(secs)-pad)/sx)*sx);xhi=math.ceil((max(secs)+pad)/sx)*sx
@@ -116,26 +130,33 @@ def chart_svg(group,chart):
     xticks=[];t=xlo
     while t<=xhi+1e-9:xticks.append(t);t+=sx
     digits=0 if sx>=1 else 1
-    for tick in xticks:
-        xx=x+w*(tick-xlo)/(xhi-xlo);s.line(xx,y,xx,y+h);s.text(xx,y+h+24,number(tick,digits),11,'#6b7487','middle')
+    # Swift Charts style: horizontal hairlines only, value labels on the trailing edge.
     for k in range(int((yhi-ylo)//10)+1):
-        v=ylo+k*10;yy=y+h-h*(v-ylo)/(yhi-ylo);s.line(x,yy,x+w,yy);s.text(x-12,yy+4,v,11,'#6b7487','end')
-    s.text(x,y-16,'综合得分',12,'#4b5565');s.text(x+w,y+h+48,'平均单题推理耗时 / 秒',12,'#4b5565',anchor='end')
+        v=ylo+k*10;yy=y+h-h*(v-ylo)/(yhi-ylo);s.line(x,yy,x+w,yy);s.text(x+w+14,yy+4,v,11,INK3)
+    for tick in xticks:
+        xx=x+w*(tick-xlo)/(xhi-xlo);s.text(xx,y+h+26,number(tick,digits),11,INK3,'middle')
+    s.text(x,y-18,'综合得分',12,INK2,weight=600);s.text(x+w,y+h+54,'平均单题推理耗时 / 秒',12,INK2,'end',600)
     label_boxes=[]
     def intersects(a,b):return a[0]<b[2]+3 and a[2]+3>b[0] and a[1]<b[3]+3 and a[3]+3>b[1]
     for i,row in enumerate(usable,1):
         xx=x+w*(row['mean_question_seconds']-xlo)/(xhi-xlo);yy=y+h-h*(row['weighted_score']-ylo)/(yhi-ylo)
-        radius=5+min(row['mean_calls'],10)*2
+        radius=7+min(row['mean_calls'],10)*1.6
         tip=f'{row["name"]}；得分 {number(row["weighted_score"])}；单题 {number(row["mean_question_seconds"],1)} 秒；平均调用 {number(row["mean_calls"])} 次'
-        s.parts.append(f'<circle cx="{xx}" cy="{yy}" r="{radius}" fill="{team_color(i-1)}" fill-opacity="0.35" stroke="{team_color(i-1)}" stroke-width="2"><title>{esc(tip)}</title></circle>')
-        offsets=[(radius+5,-10),(radius+5,22),(-radius-22,-10),(-radius-22,22),(0,-35),(0,45),(35,-30),(-40,40),(55,10)]
+        c=team_color(i-1)
+        s.parts.append(f'<circle cx="{xx}" cy="{yy}" r="{radius+8}" fill="{c}" fill-opacity="0.14"/><circle cx="{xx}" cy="{yy}" r="{radius}" fill="{c}" stroke="#fff" stroke-width="2.5"><title>{esc(tip)}</title></circle>')
+        offsets=[(radius+12,-10),(radius+12,22),(-radius-26,-10),(-radius-26,22),(0,-radius-20),(0,radius+34),(35,-30),(-40,40),(55,10)]
         for dx,dy in offsets:
             tx,ty=xx+dx,yy+dy;box=(tx,ty-13,tx+max(12,len(str(i))*8),ty+3)
             if box[0]>=x and box[2]<=x+w and box[1]>=y and box[3]<=y+h and not any(intersects(box,b) for b in label_boxes):break
         label_boxes.append(box)
-        s.line(xx,yy,tx+4,ty-5,'#879aaf');s.text(tx,ty,i,12)
-        s.label(40,540+(i-1)*60,f'{i}. {tip}',140)
-    if len(usable)!=len(rows):s.text(40,s.height-10,'无完整耗时记录的队伍不绘制为零耗时。',12)
+        s.text(tx,ty,i,13,INK,weight=600)
+    # Legend as a quiet list below the plot
+    for i,row in enumerate(usable,1):
+        yy=y+h+96+(i-1)*54
+        s.parts.append(f'<rect x="32" y="{yy-24}" width="1036" height="44" rx="14" fill="{PANEL}"/><circle cx="58" cy="{yy-2}" r="6" fill="{team_color(i-1)}"/>')
+        s.text(76,yy+3,f'{i}. {row["name"]}',14,INK,weight=600)
+        s.text(1048,yy+3,f'得分 {number(row["weighted_score"])} · 单题 {number(row["mean_question_seconds"],1)} 秒 · 平均调用 {number(row["mean_calls"])} 次',12,INK2,'end')
+    if len(usable)!=len(rows):s.text(32,s.height-14,'无完整耗时记录的队伍不绘制为零耗时。',12,INK3)
     return s.finish()
 
 
