@@ -128,11 +128,11 @@ def analytics(batch_id:str,team_id:list[str]|None=Query(default=None),top:int=Qu
 
 @router.get('/evaluation-batches/{batch_id}/charts/{chart}.svg')
 def chart(batch_id:str,chart:Literal['ranking','dimensions','radar','efficiency'],group:str,
-          team_id:list[str]|None=Query(default=None),top:int=Query(default=10,ge=0,le=100)):
+          team_id:list[str]|None=Query(default=None),top:int=Query(default=10,ge=0,le=100),theme:Literal['light','dark']='light'):
     data=comp.analytics(batch_id,team_id,top)
     selected=next((g for g in data['groups'] if g['id']==group),None)
     if not selected:raise ValueError('当前筛选下没有该比较组')
-    return Response(chart_svg(selected,chart),media_type='image/svg+xml',
+    return Response(chart_svg(selected,chart,theme=='dark'),media_type='image/svg+xml',
                     headers={'Content-Disposition':f'attachment; filename={batch_id}-{chart}.svg'})
 
 

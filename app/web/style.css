@@ -252,7 +252,7 @@ progress.mini{height:5px;min-width:72px}
 .ring-bg{fill:none;stroke:rgba(120,120,128,.16);stroke-width:9}
 .ring-fg{fill:none;stroke:var(--accent);stroke-width:9;stroke-linecap:round}
 .ring-fg.done{stroke:#34c759}
-.kpi-ring strong{font-size:26px;align-self:end}
+.kpi-ring strong{font-size:24px;align-self:end;white-space:nowrap}
 .kpi-ring em{align-self:start;margin-top:4px}
 .big-acc{font-size:24px;line-height:1.1;font-weight:700;letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums}
 .mini-grid{display:grid;grid-template-columns:auto minmax(72px,1fr) auto;gap:4px 8px;align-items:center;font-size:12px;min-width:260px;color:var(--ink-2);font-variant-numeric:tabular-nums}
@@ -287,6 +287,123 @@ progress.mini{height:5px;min-width:72px}
 .probe-ok{color:var(--ok);font-weight:600}.probe-bad{color:var(--bad);font-weight:500}
 #probe-result table{font-size:12px}
 #probe-result th,#probe-result td{padding:8px;white-space:nowrap}#probe-result td:last-child{white-space:normal}
+
+/* ---------- 折射形变（Chromium / Edge：backdrop-filter 引用 SVG 位移滤镜；其他浏览器忽略，保持磨砂） ---------- */
+aside,dialog{-webkit-backdrop-filter:url(#refract-tall) blur(14px) saturate(1.8);backdrop-filter:url(#refract-tall) blur(14px) saturate(1.8)}
+header,#notice{-webkit-backdrop-filter:url(#refract-wide) blur(14px) saturate(1.8);backdrop-filter:url(#refract-wide) blur(14px) saturate(1.8)}
+.secondary,.btn.o,td button:not(.danger),.badge,.danger{-webkit-backdrop-filter:url(#refract-small) blur(8px) saturate(1.6);backdrop-filter:url(#refract-small) blur(8px) saturate(1.6)}
+.defs{position:absolute;width:0;height:0;overflow:hidden}
+.hdr-right{display:flex;align-items:center;gap:8px;flex:none}
+.icon-btn{width:36px;padding:0;flex:none}
+.icon-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- 深色模式：跟随系统；右上角按钮可手动切换 ---------- */
+@media (prefers-color-scheme:dark){
+:root:not([data-theme=light]){
+  --bg:#0b0b0f;--card:#1c1c1f;--raised:rgba(235,235,245,.12);--sunk:#161619;
+  --ink:#f5f5f7;--ink-2:#d1d1d6;--ink-3:#9a9aa0;
+  --line:rgba(235,235,245,.10);--line-2:rgba(235,235,245,.20);
+  --accent:#0a84ff;--accent-ink:#64a8ff;--accent-soft:rgba(10,132,255,.24);
+  --ok:#30d158;--ok-soft:rgba(48,209,88,.20);--warn:#ffb340;--warn-soft:rgba(255,159,10,.20);
+  --bad:#ff6961;--bad-soft:rgba(255,69,58,.20);--run:#0a84ff;--run-soft:rgba(10,132,255,.24);
+  --glass:rgba(44,44,50,.42);--glass-strong:rgba(70,70,78,.55);--glass-border:rgba(255,255,255,.14);
+  --glass-hi:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.04);
+  --glass-shadow:0 8px 32px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.4);
+  --card-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3);
+  color-scheme:dark;}
+:root:not([data-theme=light]) body{background:radial-gradient(1100px 700px at 4% 0,#16264d 0,transparent 62%),radial-gradient(900px 700px at 100% 8%,#2d1a4a 0,transparent 60%),radial-gradient(1000px 800px at 70% 100%,#43261a 0,transparent 62%),var(--bg);background-attachment:fixed}
+:root:not([data-theme=light]) .panel,:root:not([data-theme=light]) .card,:root:not([data-theme=light]) .kpi,:root:not([data-theme=light]) .fold,:root:not([data-theme=light]) .podium,:root:not([data-theme=light]) .status-line{border-color:rgba(255,255,255,.07)}
+:root:not([data-theme=light]) nav button:hover{background:rgba(255,255,255,.08)}
+:root:not([data-theme=light]) nav button.active{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22)}
+:root:not([data-theme=light]) .nav-group+.nav-group{border-top-color:rgba(255,255,255,.12)}
+:root:not([data-theme=light]) input,:root:not([data-theme=light]) select,:root:not([data-theme=light]) textarea{background:rgba(255,255,255,.07)}
+:root:not([data-theme=light]) input:hover,:root:not([data-theme=light]) select:hover,:root:not([data-theme=light]) textarea:hover{border-color:rgba(235,235,245,.34)}
+:root:not([data-theme=light]) .secondary,:root:not([data-theme=light]) .btn.o,:root:not([data-theme=light]) td button:not(.danger){border-color:rgba(255,255,255,.18)}
+:root:not([data-theme=light]) .secondary:hover,:root:not([data-theme=light]) .btn.o:hover,:root:not([data-theme=light]) td button:not(.danger):hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3)}
+:root:not([data-theme=light]) .danger{border-color:rgba(255,105,97,.45)}
+:root:not([data-theme=light]) .seg{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.1)}
+:root:not([data-theme=light]) .seg button.on,:root:not([data-theme=light]) .seg button.on:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.26)}
+:root:not([data-theme=light]) tbody tr:hover,:root:not([data-theme=light]) .fold>summary:hover{background:rgba(255,255,255,.04)}
+:root:not([data-theme=light]) dialog{background:rgba(40,40,46,.7)}
+:root:not([data-theme=light]) dialog::backdrop{background:rgba(0,0,0,.5)}
+:root:not([data-theme=light]) progress,:root:not([data-theme=light]) progress::-webkit-progress-bar,:root:not([data-theme=light]) .ring-bg{background:rgba(255,255,255,.14)}
+:root:not([data-theme=light]) .ring-bg{background:none;stroke:rgba(255,255,255,.16)}
+:root:not([data-theme=light]) .ring-fg.done{stroke:#30d158}
+:root:not([data-theme=light]) .tc0{--bar:#0a84ff}
+:root:not([data-theme=light]) .tc1{--bar:#ff9f0a}
+:root:not([data-theme=light]) .tc2{--bar:#30d158}
+:root:not([data-theme=light]) .tc3{--bar:#bf5af2}
+:root:not([data-theme=light]) .tc4{--bar:#ff375f}
+:root:not([data-theme=light]) .tc5{--bar:#64d2ff}
+:root:not([data-theme=light]) .pc0{--bar:#0a84ff}
+:root:not([data-theme=light]) .pc1{--bar:#ff9f0a}
+:root:not([data-theme=light]) .pc2{--bar:#30d158}
+:root:not([data-theme=light]) .pc0{background:linear-gradient(155deg,color-mix(in srgb,var(--bar) 26%,#1c1c1f),#1c1c1f 62%)}
+:root:not([data-theme=light]) .heat-0{background:#16263d;color:#cfe3ff}
+:root:not([data-theme=light]) .heat-1{background:#1b3a63}
+:root:not([data-theme=light]) .heat-2{background:#1f5799}
+:root:not([data-theme=light]) .heat-3{background:#2574d6;color:#fff}
+:root:not([data-theme=light]) .heat-4{background:#3d8bff;color:#fff}
+:root:not([data-theme=light]) .heat-5{background:#0a84ff;color:#fff}
+:root:not([data-theme=light]) .roster-warning{color:#ffd9a0}
+:root:not([data-theme=light]) .ic-blue{--ic:#0a84ff}
+:root:not([data-theme=light]) .ic-orange{--ic:#ff9f0a}
+:root:not([data-theme=light]) .ic-green{--ic:#30d158}
+:root:not([data-theme=light]) .ic-purple{--ic:#bf5af2}
+:root:not([data-theme=light]) .ic-teal{--ic:#40c8e0}
+}
+:root[data-theme=dark]{
+  --bg:#0b0b0f;--card:#1c1c1f;--raised:rgba(235,235,245,.12);--sunk:#161619;
+  --ink:#f5f5f7;--ink-2:#d1d1d6;--ink-3:#9a9aa0;
+  --line:rgba(235,235,245,.10);--line-2:rgba(235,235,245,.20);
+  --accent:#0a84ff;--accent-ink:#64a8ff;--accent-soft:rgba(10,132,255,.24);
+  --ok:#30d158;--ok-soft:rgba(48,209,88,.20);--warn:#ffb340;--warn-soft:rgba(255,159,10,.20);
+  --bad:#ff6961;--bad-soft:rgba(255,69,58,.20);--run:#0a84ff;--run-soft:rgba(10,132,255,.24);
+  --glass:rgba(44,44,50,.42);--glass-strong:rgba(70,70,78,.55);--glass-border:rgba(255,255,255,.14);
+  --glass-hi:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.04);
+  --glass-shadow:0 8px 32px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.4);
+  --card-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3);
+  color-scheme:dark;}
+:root[data-theme=dark] body{background:radial-gradient(1100px 700px at 4% 0,#16264d 0,transparent 62%),radial-gradient(900px 700px at 100% 8%,#2d1a4a 0,transparent 60%),radial-gradient(1000px 800px at 70% 100%,#43261a 0,transparent 62%),var(--bg);background-attachment:fixed}
+:root[data-theme=dark] .panel,:root[data-theme=dark] .card,:root[data-theme=dark] .kpi,:root[data-theme=dark] .fold,:root[data-theme=dark] .podium,:root[data-theme=dark] .status-line{border-color:rgba(255,255,255,.07)}
+:root[data-theme=dark] nav button:hover{background:rgba(255,255,255,.08)}
+:root[data-theme=dark] nav button.active{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22)}
+:root[data-theme=dark] .nav-group+.nav-group{border-top-color:rgba(255,255,255,.12)}
+:root[data-theme=dark] input,:root[data-theme=dark] select,:root[data-theme=dark] textarea{background:rgba(255,255,255,.07)}
+:root[data-theme=dark] input:hover,:root[data-theme=dark] select:hover,:root[data-theme=dark] textarea:hover{border-color:rgba(235,235,245,.34)}
+:root[data-theme=dark] .secondary,:root[data-theme=dark] .btn.o,:root[data-theme=dark] td button:not(.danger){border-color:rgba(255,255,255,.18)}
+:root[data-theme=dark] .secondary:hover,:root[data-theme=dark] .btn.o:hover,:root[data-theme=dark] td button:not(.danger):hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3)}
+:root[data-theme=dark] .danger{border-color:rgba(255,105,97,.45)}
+:root[data-theme=dark] .seg{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.1)}
+:root[data-theme=dark] .seg button.on,:root[data-theme=dark] .seg button.on:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.26)}
+:root[data-theme=dark] tbody tr:hover,:root[data-theme=dark] .fold>summary:hover{background:rgba(255,255,255,.04)}
+:root[data-theme=dark] dialog{background:rgba(40,40,46,.7)}
+:root[data-theme=dark] dialog::backdrop{background:rgba(0,0,0,.5)}
+:root[data-theme=dark] progress,:root[data-theme=dark] progress::-webkit-progress-bar,:root[data-theme=dark] .ring-bg{background:rgba(255,255,255,.14)}
+:root[data-theme=dark] .ring-bg{background:none;stroke:rgba(255,255,255,.16)}
+:root[data-theme=dark] .ring-fg.done{stroke:#30d158}
+:root[data-theme=dark] .tc0{--bar:#0a84ff}
+:root[data-theme=dark] .tc1{--bar:#ff9f0a}
+:root[data-theme=dark] .tc2{--bar:#30d158}
+:root[data-theme=dark] .tc3{--bar:#bf5af2}
+:root[data-theme=dark] .tc4{--bar:#ff375f}
+:root[data-theme=dark] .tc5{--bar:#64d2ff}
+:root[data-theme=dark] .pc0{--bar:#0a84ff}
+:root[data-theme=dark] .pc1{--bar:#ff9f0a}
+:root[data-theme=dark] .pc2{--bar:#30d158}
+:root[data-theme=dark] .pc0{background:linear-gradient(155deg,color-mix(in srgb,var(--bar) 26%,#1c1c1f),#1c1c1f 62%)}
+:root[data-theme=dark] .heat-0{background:#16263d;color:#cfe3ff}
+:root[data-theme=dark] .heat-1{background:#1b3a63}
+:root[data-theme=dark] .heat-2{background:#1f5799}
+:root[data-theme=dark] .heat-3{background:#2574d6;color:#fff}
+:root[data-theme=dark] .heat-4{background:#3d8bff;color:#fff}
+:root[data-theme=dark] .heat-5{background:#0a84ff;color:#fff}
+:root[data-theme=dark] .roster-warning{color:#ffd9a0}
+:root[data-theme=dark] .ic-blue{--ic:#0a84ff}
+:root[data-theme=dark] .ic-orange{--ic:#ff9f0a}
+:root[data-theme=dark] .ic-green{--ic:#30d158}
+:root[data-theme=dark] .ic-purple{--ic:#bf5af2}
+:root[data-theme=dark] .ic-teal{--ic:#40c8e0}
 
 /* ---------- 回退：不支持玻璃，或用户要求减少透明 / 更高对比 ---------- */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){

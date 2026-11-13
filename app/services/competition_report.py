@@ -55,7 +55,7 @@ class SVG:
     def finish(self):return ''.join(self.parts)+'</g></svg>'
 
 
-def chart_svg(group,chart):
+def _chart_svg(group,chart):
     if chart not in CHARTS:raise ValueError('未知图表类型')
     rows=group['top_entries'];kind={'mock':'Mock 联调（非正式）','partial_test':'真实模型测试（非正式）','official':'正式全量'}[group['kind']]
     subtitle=f'{kind} · {group["mode"]} · 每题最多 {group["calls"]} 次 · {len(rows)} 支队伍 · 组 {group["id"]}'
@@ -161,6 +161,18 @@ def chart_svg(group,chart):
 
 
 REPORT_STYLE='''body{font:15px/1.7 "Microsoft YaHei",Arial,sans-serif;color:#24344a;background:#f2f5f9;margin:0}main{max-width:1160px;margin:35px auto;padding:25px}h1{font-size:30px}h2{font-size:23px}h3{font-size:18px}.panel{background:white;border:1px solid #dce4ec;border-radius:8px;padding:22px;margin:20px 0;overflow:auto}.metrics{display:flex;gap:15px;flex-wrap:wrap}.metric{padding:15px 22px;background:white;min-width:150px}.metric b{display:block;font-size:25px}table{border-collapse:collapse;width:100%;font-size:12px}td,th{padding:10px;border-bottom:1px solid #dde5ee;text-align:left}th{background:#edf3f9}svg{display:block;width:100%;min-width:650px;height:auto}p{color:#62748a}.tag{display:inline-block;background:#f6ead3;padding:5px 12px}a{color:#235d91}@media(max-width:700px){main{padding:12px;margin:0}svg{min-width:600px}.panel{padding:12px}}@media print{body{background:white}main{max-width:none;margin:0;padding:0}.panel{border:0;overflow:visible;break-inside:avoid}svg{min-width:0}h2{break-after:avoid}.metrics{gap:5px}}'''
+
+
+DARK_MAP={'#1c1c1e':'#f5f5f7','#48484a':'#d1d1d6','#6c6c70':'#9a9aa0','#e9e9ee':'#3c3c40','#f2f2f7':'#3a3a3e','#f7f7fa':'#323236',
+          '#ffffff':'#1c1c1f','#fff':'#1c1c1f','white':'#1c1c1f',
+          '#007aff':'#0a84ff','#ff9500':'#ff9f0a','#34c759':'#30d158','#af52de':'#bf5af2','#ff2d55':'#ff375f','#5ac8fa':'#64d2ff',
+          '#0a4fbf':'#3d7fe0','#5aa9ff':'#70b5ff','#a9d0ff':'#b5d8ff'}
+
+
+def chart_svg(group,chart,dark=False):
+    svg=_chart_svg(group,chart)
+    if not dark:return svg
+    return re.sub(r'#[0-9a-fA-F]{6}\b|#fff\b|\bwhite\b',lambda m:DARK_MAP.get(m.group(0).lower(),m.group(0)),svg)
 
 
 def render_html(data):
